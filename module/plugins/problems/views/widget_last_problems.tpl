@@ -1,38 +1,34 @@
 
-%import time
-%now = time.time()
 %helper = app.helper
-%datamgr = app.datamgr
 
-%rebase widget globals(), css=['problems/css/accordion.css', 'problems/css/pagenavi.css', 'problems/css/perfometer.css', 'problems/css/img_hovering.css'], js=['problems/js/img_hovering.js']
+%rebase("widget")
 
-%if len(pbs) == 0:
-  <span>No IT problems! Congrats.</span>
-%end
+%if not pbs:
+   <span>No problems!</span>
+%else:
+   <table class="table table-condensed" style="margin:0;">
+      <tbody style="border: none;">
+      %for pb in pbs:
+         <tr>
+            <td align=center>
+               {{!helper.get_fa_icon_state(pb)}}
+            </td>
 
-%for pb in pbs:
+            <td>
+               <small>{{!helper.get_link(pb)}}</small>
+            </td>
 
-<div class="tableCriticity pull-left row-fluid">
-  <div class='img_status pull-left'>
-    <div class="aroundpulse">
-      %# " We put a 'pulse' around the elements if it's an important one "
-      %if pb.business_impact > 2 and pb.state_id in [1, 2, 3]:
-      <span class="pulse"></span>
+            <td class="hidden-sm hidden-xs hidden-md">
+               <small>{{!helper.get_business_impact_text(pb.business_impact)}}</small>
+            </td>
+
+            <!--
+            <td class="hidden-sm hidden-xs hidden-md font-{{pb.state.lower()}}" align="center">
+               <small>{{ pb.state }}</small>
+            </td>
+            -->
+         </tr>
       %end
-      <img src="{{helper.get_icon_state(pb)}}" />
-    </div>
-  </div>
-
-
-    <span class="alert-small alert-{{pb.state.lower()}}">{{pb.state}}</span> for {{!helper.get_link(pb)}}
-    <div class='pull-right'>
-    %for j in range(0, pb.business_impact-2):
-    <img src='/static/images/star.png' alt="star">
-    %end
-    </div>
-
-</div>
-<div style="clear:both;"/>
+      </tbody>
+   </table>
 %end
-
-

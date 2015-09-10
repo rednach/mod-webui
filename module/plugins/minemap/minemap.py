@@ -1,14 +1,9 @@
 #!/usr/bin/python
-
 # -*- coding: utf-8 -*-
-
 # Copyright (C) 2009-2012:
 #    Gabes Jean, naparuba@gmail.com
-#    Gerhard Lausser, Gerhard.Lausser@consol.de
-#    Gregory Starck, g.starck@gmail.com
-#    Hartmut Goebel, h.goebel@goebel-consult.de
-#    Forlot Romain, rforlot@yahoo.com
-#
+#    Mohier Frederic frederic.mohier@gmail.com
+#    Karfusehr Andreas, frescha@unitedseed.de
 # This file is part of Shinken.
 #
 # Shinken is free software: you can redistribute it and/or modify
@@ -27,80 +22,87 @@
 ### Will be populated by the UI with it's own value
 app = None
 
-from shinken.util import safe_print
-from shinken.misc.sorter import hst_srv_sort
+from shinken.log import logger
 
-def get_page(groupname):
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
+# Get plugin's parameters from configuration file
+# params = {}
+# params['elts_per_page'] = 10
 
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
+# def load_cfg():
+    # global params
+    
+    # import os,sys
+    # from webui2.config_parser import config_parser
+    # plugin_name = os.path.splitext(os.path.basename(__file__))[0]
+    # try:
+        # currentdir = os.path.dirname(os.path.realpath(__file__))
+        # configuration_file = "%s/%s" % (currentdir, 'plugin.cfg')
+        # logger.debug("Plugin configuration file: %s" % (configuration_file))
+        # scp = config_parser('#', '=')
+        # params = scp.parse_config(configuration_file)
 
-    # Here we can call app.datamgr because when the webui "loaded" us, it
-    # populate app with it's own value.
-    if groupname == 'all':
-        my_group = 'all'
+        # params['elts_per_page'] = int(params['elts_per_page'])
         
-        hosts = []
-        hosts.extend(app.datamgr.get_hosts())
-        items = []
-        for host in hosts:
-            if app.can_see_this_elt(host):
-                items.append(host)
-
-    else:
-        my_group = app.datamgr.get_hostgroup(groupname)
-
-        if not my_group:
-            return "Unknown group %s" % groupname
-            
-        items = my_group.get_hosts()
-
-    # Now sort hosts list ..
-    items.sort(hst_srv_sort)
+        # params['minemap_hostsLevel'] = [int(item) for item in params['minemap_hostsLevel'].split(',')]
+        # params['minemap_hostsShow'] = [item for item in params['minemap_hostsShow'].split(',')]
+        # params['minemap_hostsHide'] = [item for item in params['minemap_hostsHide'].split(',')]
+        # params['minemap_servicesLevel'] = [int(item) for item in params['minemap_servicesLevel'].split(',')]
+        # params['minemap_servicesHide'] = [item for item in params['minemap_servicesHide'].split(',')]
         
+        # logger.info("[webui-minemap] configuration loaded.")
+        # logger.debug("[webui-minemap] configuration, elts_per_page: %d", params['elts_per_page'])
+        # logger.debug("[webui-minemap] configuration, minemap hosts level: %s", params['minemap_hostsLevel'])
+        # logger.debug("[webui-minemap] configuration, minemap hosts always shown: %s", params['minemap_hostsShow'])
+        # logger.debug("[webui-minemap] configuration, minemap hosts always hidden: %s", params['minemap_hostsHide'])
+        # logger.debug("[webui-minemap] configuration, minemap services level: %s", params['minemap_servicesLevel'])
+        # logger.debug("[webui-minemap] configuration, minemap services hide: %s", params['minemap_servicesHide'])
+        # return True
+    # except Exception, exp:
+        # logger.warning("[webui-minemap] configuration file (%s) not available: %s", configuration_file, str(exp))
+        # return False
+
+# def reload_cfg():
+    # load_cfg()
+    # app.bottle.redirect("/config")
+
+def show_minemap():
+    user = app.request.environ['USER']
+
+    # Apply search filter if exists ...
+    search = app.request.query.get('search', "type:host")
+    if not "type:host" in search:
+        search = "type:host "+search
+    logger.debug("[WebUI-worldmap] search parameters '%s'", search)
+    items = app.datamgr.search_hosts_and_services(search, user, get_impacts=False)
+    
+    # Fetch elements per page preference for user, default is 25
+    elts_per_page = app.prefs_module.get_ui_user_preference(user, 'elts_per_page', 25)
+
     # We want to limit the number of elements
+    step = int(app.request.GET.get('step', elts_per_page))
     start = int(app.request.GET.get('start', '0'))
-    end = int(app.request.GET.get('end', '30'))
+    end = int(app.request.GET.get('end', start + step))
         
     # If we overflow, came back as normal
     total = len(items)
     if start > total:
         start = 0
-        end = 30
+        end = step
 
-    navi = app.helper.get_navi(total, start, step=30)
-    items = items[start:end]
-        
-    # we return values for the template (view). But beware, theses values are the
-    # only one the template will have, so we must give it an app link and the
-    # user we are logged with (it's a contact object in fact)
-    return {'app': app, 'user': user, 'navi': navi, 'group': my_group, 'hosts': items}
+    navi = app.helper.get_navi(total, start, step=step)
+
+    return {'navi': navi, 'search_string': search, 'items': items[start:end], 'page': "minemap"}
 
 def show_minemaps():
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
     app.bottle.redirect("/minemap/all")
 
 
-# This is the dict the webui will try to "load".
-#  *here we register one page with both addresses /dummy/:arg1 and /dummy/, both addresses
-#   will call the function get_page.
-#  * we say that for this page, we are using the template file dummy (so view/dummy.tpl)
-#  * we said this page got some static stuffs. So the webui will match /static/dummy/ to
-#    the dummy/htdocs/ directory. Beware: it will take the plugin name to match.
-#  * optional: you can add 'method': 'POST' so this address will be only available for
-#    POST calls. By default it's GET. Look at the lookup module for sample about this.
+# Load plugin configuration parameters
+# load_cfg()
 
-pages = {get_page: {'routes': ['/minemap/:groupname'], 'view': 'minemap', 'static': True},
-         show_minemaps: {'routes': ['/minemaps'], 'view': 'minemap', 'static': True},
-        }
+pages = {
+    # reload_cfg: {'routes': ['/reload/minemap']},
+
+    show_minemap: {'routes': ['/minemap'], 'view': 'minemap', 'static': True},
+    show_minemaps: {'routes': ['/minemaps'], 'view': 'minemap', 'static': True}
+}

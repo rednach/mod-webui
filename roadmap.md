@@ -1,39 +1,68 @@
-Roadmap - Shinken WebUI
+Shinken WebUI - roadmap
 =======================
 
-See the issues for latest news on what we are working on. This is just the strategy page on where the web-ui could go and what has been done previously. 
-The development of Shinken WebUI is done in parallel with Shinken, each with a dedicated teams (some developers are part of booth teams). Each milestone is accomplished when all overall goals and open issues are completed or closed.
+Next version (2.1) features of the Shinken Web User Interface (**to be discussed**): 
+## Version 2.1: 
 
-For more details on what has been done, please have a look at the [CHANGELOG](/changelog).
 
-## Milestone 1.0 - Hapuna:
-- Current code base (git master 6d3cc44 26.01.2014)
+### Layout:
+- improve mobile devices user experience (touch enabled devices, GPS aware devices, ...)
 
-## Milestone 1.1 - Contis:
+### Backend:
+- use Alignak backend
 
-Current version: 1.1.0-dev.3 (07af768)
+### Dashboard:
+- refactor widget grid ... some ideas to develop
 
-Overall goals: 
-- New views
-- Customizable views (Issue #50)
+### All resources view:
+- more filtering options
 
-Featurelist:
-- New: Main menu for more space and usebility 
-- New: Host- & Servicegroup view
-- New: System log view (Issue #51)
-- New: Worldmap view (Issue #52)
-- New: Timeline view (Issue #53)
-- New: Tag view (Issue #60)
-- New: Log history in element view (Issue #73)
-- New: Contact view (Issue #74)
-- Enhanced: Dashboard (Issue #53)
-- Enhanced: Impact view (backport from Enterprise 1.0 UI)
-- New: Problems view (backport from Enterprise 1.0 UI)
+### Groups:
+- 
 
-## Milestone 1.2 - GrauDuRoi:
+### Host / service view:
+- 
 
-Overall goals: 
-- tbd
+### Tactical overviews:
+- filtering Worldmap, Minemap, Logs, ...
 
-Featurelist:
-- tbd
+### System:
+- 
+
+## Version 2.0: 
+
+The current major version (2.0) of the Shinken Web User Interface aimed at improving (or developing) the following features: 
+
+### Layout:
+- clean UI layout
+- design rules for hosts/services state
+- boostrap themable layout
+
+### All / Problems view:
+- simple and compact user interface
+- Github like filtering system
+
+   - filter on host/service name
+   - filter on host/service state
+   - filter acknowledged
+   - filter scheduled downtimes
+   - filter on business priority
+   - filter on hosts/services/contacts groups
+
+- bookmark filters
+
+### Host / service view:
+- clean element view
+- launch commands
+- enrich element view information: 
+
+   - custom view
+   - history (logs)
+   - availability
+
+### Tactical overviews:
+- Minemap
+- Hosts/services groups
+- Hosts/services tags
+- Worldmap
+- system logs

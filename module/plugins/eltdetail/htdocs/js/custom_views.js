@@ -1,69 +1,98 @@
-/*Copyright (C) 2009-2011 :
-     Gabes Jean, naparuba@gmail.com
-     Gerhard Lausser, Gerhard.Lausser@consol.de
-     Gregory Starck, g.starck@gmail.com
-     Hartmut Goebel, h.goebel@goebel-consult.de
-     Andreas Karfusehr, andreas@karfusehr.de
+/* Copyright (C) 2009-2015:
+   Gabes Jean, naparuba@gmail.com
+   Gerhard Lausser, Gerhard.Lausser@consol.de
+   Gregory Starck, g.starck@gmail.com
+   Hartmut Goebel, h.goebel@goebel-consult.de
+   Andreas Karfusehr, andreas@karfusehr.de
+   Frederic Mohier, frederic.mohier@gmail.com
 
- This file is part of Shinken.
+   This file is part of Shinken.
 
- Shinken is free software: you can redistribute it and/or modify
- it under the terms of the GNU Affero General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
+   Shinken is free software: you can redistribute it and/or modify
+   it under the terms of the GNU Affero General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
- Shinken is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Affero General Public License for more details.
+   Shinken is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Affero General Public License for more details.
 
- You should have received a copy of the GNU Affero General Public License
- along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU Affero General Public License
+   along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
-var _already_loaded = {};
+var custom_logs=false;
 
 // when we show a custom view tab, we lazy load it :D
-function show_custom_view(p){
-	var hname = p.attr('data-elt-name');
-	var cvname = p.attr('data-cv-name');
+function show_custom_view(elt){
+   var hname = elt.data('element');
+   var cvname = elt.data('name');
+   var cvconf = elt.data('conf');
+   if (custom_logs) console.debug('Request for loading custom view: ', cvname, ' for ', hname, ', configuration: ', cvconf);
 
-	if (cvname in _already_loaded){
-		return;
-	}
-
-	var _t = new Date().getTime();
-	var spinner = get_spinner('cv'+cvname);
-	$('#cv'+cvname).load('/cv/'+cvname+'/'+hname+"?_="+_t, function(response, status, xhr) {
-		if (status == "error") {
-			// var msg = "Sorry but there was an error: ";
-			// $('#cv'+cvname).html(msg + xhr.status + " " + xhr.statusText);
-			$('#cv'+cvname).remove();
-			$('#tab-cv-'+cvname).remove();
-			$('#impacts').addClass('active');
-		}
-	});
-
-	_already_loaded[cvname] = true;
+   var _t = new Date().getTime();
+   $.ajax({
+      url: '/cv/'+cvname+'/'+hname+'/'+cvconf+'?_='+_t,
+      method: "get",
+      dataType: "html"
+   })
+   .done(function( html, textStatus, jqXHR ) {
+      $("#cv"+cvname+"_"+cvconf+" .panel-body").html(html);
+      
+      // Panel container height is updated with the custom view height ...
+      $("#cv"+cvname+"_"+cvconf+" .panel-body").each(function() {
+         $(this).css('height', $('#cv_'+cvname+"_"+cvconf).height() + "px");
+      });
+      if (custom_logs) console.debug('Loaded custom view: ', cvname+"_"+cvconf);
+   })
+   .fail(function( jqXHR, textStatus, errorThrown ) {
+      if (custom_logs) console.log('Required view is not available. Trying default view ...');
+      
+      // Let us try with default host view ... we never know :-)
+      // First rename tab ...
+      $("#tab-cv-"+cvname+"-"+cvconf)
+         .data('name', 'host')
+         .data('conf', 'replace')
+         .attr('id', 'tab-cv-host-replace')
+         .children('a')
+         .attr('href', '#cvhost_replace');
+      $("#cv"+cvname+"_"+cvconf)
+         .data('name', 'host')
+         .data('conf', 'replace')
+         .attr('id', 'cvhost_replace');
+      
+      // Let us try the default view ...
+      $.ajax({
+         url: '/cv/host/'+hname+'/replace?_='+_t,
+         method: "get",
+         dataType: "html"
+      })
+      .done(function( html, textStatus, jqXHR ) {
+         $("#cvhost_replace .panel-body").html(html);
+         
+         // Panel container height is updated with the custom view height ...
+         $("#cvcvhost_replace .panel-body").each(function() {
+            $(this).css('height', $('#cv_'+cvname+"_"+cvconf).height() + "px");
+         });
+         if (custom_logs) console.debug('Loaded custom view: ', cvname+"_"+cvconf);
+      })
+      .fail(function( jqXHR, textStatus, errorThrown ) {
+         $('#cvhost_replace').html('<div class="alert alert-danger">Sorry but there really was an error: ' + xhr.status + ' ' + xhr.statusText+'</div>');
+      })
+      .always(function() {
+      });
+   })
+   .always(function() {
+   });
 }
 
-// When we show the custom view tab, we lazy load the view ...
-$(window).ready(function(){
-	$('.cv_pane').on('shown.bs.tab', function (e) {
-		show_custom_view($(this));
-	})
-
-	// And for each already active on boot, show them directly!
-	$('.cv_pane.active').each(function(index, elt ) {
-		show_custom_view($(elt));
-	});
-});
-
-
-function reload_custom_view(name){
-	// Be sure to remove the panel from already view, because if not
-	// won't load
-	delete _already_loaded[name];
-	show_custom_view($('#tab-cv-'+name));
+function reload_custom_view(elt){
+   var hname = elt.data('element');
+   var cvname = elt.data('name');
+   var cvconf = elt.data('conf');
+   
+   // Be sure to remove the panel from already loaded panels, else it won't load
+   delete _already_loaded[cvname+cvconf];
+   show_custom_view(elt);
 }

@@ -28,102 +28,84 @@
 app = None
 
 
-# Our page. If the user call /dummy/TOTO arg1 will be TOTO.
-# if it's /dummy/, it will be 'nothing'
-def get_page(arg1='nothing'):
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
-    # we return values for the template (view). But beware, theses values are the
-    # only one the template will have, so we must give it an app link and the
-    # user we are logged with (it's a contact object in fact)
-    return {'app': app, 'user': user}
-
-
 def form_submit_check(name):
-    print "Want submit check for", name
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
     t = 'host'
     if '/' in name:
         t = 'service'
 
-    return {'app': app, 'user': user, 'name': name, 'obj_type': t}
+    return {'name': name, 'obj_type': t}
 
 
-def form_ack(name):
-    print "Want ackn for", name
-    user = app.get_user_auth()
+def form_change_var(name):
+    variable = app.request.GET.get('variable', '')
+    value = app.request.GET.get('value', '')
+    
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
 
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
+    return {'elt': elt, 'name': name, 'variable': variable, 'value': value}
 
-    return {'app': app, 'user': user, 'name': name}
+def form_var(name):
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
+    return {'elt': elt, 'name': name}
 
+def form_ack_add(name):
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
+    return {'elt': elt, 'name': name}
 
-def form_comment(name):
-    print "Want comment for", name
-    user = app.get_user_auth()
+def form_ack_remove(name):
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
+    return {'elt': elt, 'name': name}
 
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
-    return {'app': app, 'user': user, 'name': name}
+def form_comment_add(name):
+    user = app.request.environ['USER']
+    app.datamgr.get_element(name, user) or app.redirect404()
+    return {'name': name}
 
 def form_comment_delete(name):
-    print "Want comment for", name
-    user = app.get_user_auth()
+    user = app.request.environ['USER']
+    app.datamgr.get_element(name, user) or app.redirect404()
+    comment = app.request.GET.get('comment', '-1')
+    return {'name': name, 'comment': comment}
 
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
+def form_comment_delete_all(name):
+    user = app.request.environ['USER']
+    app.datamgr.get_element(name, user) or app.redirect404()
+    return {'name': name}
 
-    return {'app': app, 'user': user, 'name': name}
-    
-def form_downtime(name):
-    print "Want downtime for", name
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
-    return {'app': app, 'user': user, 'name': name}
+def form_downtime_add(name):
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
+    return {'elt': elt, 'name': name}
 
 def form_downtime_delete(name):
-    print "Want comment for", name
-    user = app.get_user_auth()
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
+    downtime = app.request.GET.get('downtime', '-1')
+    return {'elt': elt, 'name': name, 'downtime': downtime}
 
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
+def form_downtime_delete_all(name):
+    user = app.request.environ['USER']
+    app.datamgr.get_element(name, user) or app.redirect404()
+    return {'name': name}
 
-    return {'app': app, 'user': user, 'name': name}
 
-# This is the dict the webui will try to "load".
-#  *here we register one page with both addresses /dummy/:arg1 and /dummy/, both addresses
-#   will call the function get_page.
-#  * we say that for this page, we are using the template file dummy (so view/dummy.tpl)
-#  * we said this page got some static stuffs. So the webui will match /static/dummy/ to
-#    the dummy/htdocs/ directory. Beware: it will take the plugin name to match.
-#  * optional: you can add 'method': 'POST' so this address will be only available for
-#    POST calls. By default it's GET. Look at the lookup module for sample about this.
-pages = {get_page: {'routes': ['/blabla'], 'view': 'blabla', 'static': True},
-         form_submit_check: {'routes': ['/forms/submit_check/:name#.+#'], 'view': 'form_submit_check'},
-         form_ack: {'routes': ['/forms/acknowledge/:name#.+#'], 'view': 'form_ack'},
-         form_comment: {'routes': ['/forms/comment/:name#.+#'], 'view': 'form_comment'},
-         form_downtime: {'routes': ['/forms/downtime/:name#.+#'], 'view': 'form_downtime'},
-         form_comment_delete: {'routes': ['/forms/comment_delete/:name#.+#'], 'view': 'form_comment_delete'},
-         form_downtime_delete: {'routes': ['/forms/downtime_delete/:name#.+#'], 'view': 'form_downtime_delete'},
-         }
+pages = {
+        form_submit_check:          {'routes': ['/forms/submit_check/<name:path>'],             'view': 'form_submit_check'},
+        
+        form_change_var:            {'routes': ['/forms/change_var/<name:path>'],               'view': 'form_change_var'},
+        
+        form_comment_add:           {'routes': ['/forms/comment/add/<name:path>'],              'view': 'form_comment_add'},
+        form_comment_delete:        {'routes': ['/forms/comment/delete/<name:path>'],           'view': 'form_comment_delete'},
+        form_comment_delete_all:    {'routes': ['/forms/comment/delete_all/<name:path>'],       'view': 'form_comment_delete_all'},
+        
+        form_downtime_add:          {'routes': ['/forms/downtime/add/<name:path>'],             'view': 'form_downtime_add'},
+        form_downtime_delete:       {'routes': ['/forms/downtime/delete/<name:path>'],          'view': 'form_downtime_delete'},
+        form_downtime_delete_all:   {'routes': ['/forms/downtime/delete_all/<name:path>'],      'view': 'form_downtime_delete_all'},
+        
+        form_ack_add:               {'routes': ['/forms/acknowledge/add/<name:path>'],          'view': 'form_ack_add'},
+        form_ack_remove:            {'routes': ['/forms/acknowledge/remove/<name:path>'],       'view': 'form_ack_remove'},
+        }

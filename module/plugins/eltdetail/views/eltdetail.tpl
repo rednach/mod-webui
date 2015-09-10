@@ -1,934 +1,1258 @@
 %import time
+%import re
+%now = int(time.time())
 
 %# If got no element, bailout
 %if not elt:
-%rebase layout title='Invalid element name'
+%rebase("layout", title='Invalid element name')
 
 Invalid element name
 
 %else:
 
 %helper = app.helper
-%datamgr = app.datamgr
 
 %from shinken.macroresolver import MacroResolver
 
+%# Main variables
 %elt_type = elt.__class__.my_type
+%elt_host = elt if elt_type=='host' else elt.host
+%elt_service = elt if elt_type=='service' else None
+%elt_name = elt.host_name if elt_type=='host' else elt.host.host_name+'/'+elt.service_description
+%elt_display_name = elt_host.display_name if elt_type=='host' else elt_service.display_name+' on '+elt_host.display_name
 
-%top_right_banner_state = datamgr.get_overall_state()
-
-%# Look for actions if we must show them or not
-%global_disabled = ''
-%if app.manage_acl and not helper.can_action(user):
-	%global_disabled = 'disabled-link'
+%business_rule = False
+%if elt.get_check_command().startswith('bp_rule'):
+%business_rule = True
 %end
 
-%if elt_type=='host':
-	%sOK=0
-	%sWARNING=0
-	%sCRITICAL=0
-	%sUNKNOWN=0
-
-	%for h in elt.services:
-		%if h.state == 'OK':
-			%sOK=sOK+1
-		%end
-		%if h.state == 'WARNING':
-			%sWARNING=sWARNING+1
-		%end
-		%if h.state == 'CRITICAL':
-			%sCRITICAL=sCRITICAL+1
-		%end
-		%if h.state == 'UNKNOWN':
-			%sUNKNOWN=sUNKNOWN+1
-		%end
-	%end
+%breadcrumb = [ ['All '+elt_type.title()+'s', '/'+elt_type+'s-groups'], [elt_host.display_name, '/host/'+elt_host.host_name] ]
+%title = elt_type.title()+' detail: ' + elt_display_name
+%if elt_service:
+%breadcrumb += [[elt_service.display_name, '/service/'+elt_name] ]
 %end
 
-%rebase layout title=elt_type.capitalize() + ' / ' + elt.get_full_name(), js=['eltdetail/js/jquery.color.js', 'eltdetail/js/jquery.Jcrop.js', 'eltdetail/js/iphone-style-checkboxes.js', 'eltdetail/js/hide.js', 'eltdetail/js/dollar.js', 'eltdetail/js/gesture.js', 'eltdetail/js/graphs.js', 'eltdetail/js/tags.js', 'eltdetail/js/depgraph.js', 'eltdetail/js/custom_views.js', 'eltdetail/js/tabs.js', 'eltdetail/js/screenfull.js', 'eltdetail/js/shinken-gauge.js', 'eltdetail/js/timeline.js', 'timeline/js/timeline.js'], css=['eltdetail/css/eltdetail.css', 'eltdetail/css/hide.css', 'eltdetail/css/gesture.css', 'eltdetail/css/jquery.Jcrop.css', 'eltdetail/css/shinken-gauge.css', 'timeline/css/timeline.css'], user=user, app=app, refresh=True
+%js=['availability/js/justgage.js', 'availability/js/raphael.2.1.0.min.js', 'cv_host/js/flot/jquery.flot.min.js', 'cv_host/js/flot/jquery.flot.tickrotor.js', 'cv_host/js/flot/jquery.flot.resize.min.js', 'cv_host/js/flot/jquery.flot.pie.min.js', 'cv_host/js/flot/jquery.flot.categories.min.js', 'cv_host/js/flot/jquery.flot.time.min.js', 'cv_host/js/flot/jquery.flot.stack.min.js', 'cv_host/js/flot/jquery.flot.valuelabels.js',  'eltdetail/js/jquery.color.js', 'eltdetail/js/bootstrap-switch.min.js', 'eltdetail/js/custom_views.js', 'eltdetail/js/eltdetail.js']
+%css=['eltdetail/css/bootstrap-switch.min.css', 'eltdetail/css/eltdetail.css']
+%rebase("layout", js=js, css=css, breadcrumb=breadcrumb, title=title)
 
-%# " We will save our element name so gesture functions will be able to call for the good elements."
-<script type="text/javascript">
-	var elt_name = '{{elt.get_full_name()}}';
+<div id="element" class="row container-fluid">
 
-	var graphstart={{graphstart}};
-	var graphend={{graphend}};
-
-	$(document).ready(function(){
-		/* Hide gesture panel */
-		$('#gesture_panel').hide();
-
-		// Also hide the button under IE (gesture don't work under it)
-		if (navigator.appName == 'Microsoft Internet Explorer'){
-			$('#btn_show_gesture').hide();
-		}
-		
-		/* Look at the # part of the URI. If it match a nav name, go for it*/
-		if (window.location.hash.length > 0) {
-			$('ul.nav-tabs > li > a[href="' + window.location.hash + '"]').tab('show');
-		}
-		else {
-			$('ul.nav-tabs > li > a:first').tab('show');
-		}
-	});
-
-	// Now we hook the global search thing
-	$('.typeahead').typeahead({
-		// note that "value" is the default setting for the property option
-		source: function (typeahead, query) {
-			$.ajax({url: "/lookup/"+query,
-				success: function (data){
-					typeahead.process(data)}
-				});
-		},
-		onselect: function(obj) { 
-			$("ul.typeahead.dropdown-menu").find('li.active').data(obj);
-		}
-	});
-</script>
-
-  %#  "Content Container Start"
-
-  %#app.insert_template('cv_linux', globals())
-  %#app.insert_template('cv_windows', globals())
-
-<div id="content_container">
-	<div class="row">
-		%if elt.action_url != '':
-			<div class="col-lg-10">
-				<span class="pull-right leftmargin" id="host_tags">
-					%tags = elt.get_host_tags()
-					%for t in tags:
-					<script>add_tag_image('/static/images/sets/{{t.lower()}}/tag.png','{{t}}');</script>
-					%end
-				</span>
-			</div>
-			<div class="col-lg-2">
-				<div class="btn-group pull-right">
-					%action_urls = elt.action_url.split('|')
-					%if len(action_urls) == 1:
-					<button class="btn btn-primary btn-xs"><i class="icon-cog"></i> Action</button>
-					%else:
-					<button class="btn btn-primary btn-xs"><i class="icon-cog"></i> Actions</button>
-					%end
-					<button class="btn btn-primary btn-xs dropdown-toggle" data-toggle="dropdown">
-						<span class="caret"></span>
-					</button>
-					<ul class="dropdown-menu pull-right">
-						%action_urls = elt.action_url.split('|')
-						%if len(action_urls) > 0:
-							%for triplet in action_urls:
-								%if len(triplet.split(',')) == 3:
-									%( action_url, icon, alt) = triplet.split(',')
-									<li><a href="{{ MacroResolver().resolve_simple_macros_in_string(action_url, elt.get_data_for_checks()) }}" target=_blank><img src={{icon}} alt="{{alt}}"></a></li>
-								%else:
-									%if len(triplet.split(',')) == 1:
-										<li><a id="action-link" href="{{ MacroResolver().resolve_simple_macros_in_string(triplet, elt.get_data_for_checks()) }}" target=_blank>{{ MacroResolver().resolve_simple_macros_in_string(triplet, elt.get_data_for_checks()) }}</a></li>
-									%end
-								%end
-							%end
-						%end
-				    </ul>
-			    </div>
-			</div>	
-		%else:
-			<div class="col-lg-12">
-				<span class="pull-right leftmargin" id="host_tags">
-					%tags = elt.get_host_tags()
-					%for t in tags:
-					<script>add_tag_image('/static/images/sets/{{t.lower()}}/tag.png','{{t}}');</script>
-					%end
-				</span>
-			</div>
-		%end	
-	</div>
-
-	<div class="accordion" id="fitted-accordion">
-		<div class="fitted-box overall-summary accordion-group">
-			<div class="accordion-heading">
-				%if elt_type=='host':
-				<div class="panel-heading fitted-header cursor" data-toggle="collapse" data-parent="#accordion" href="#collapseOne">
-					<h4 class="panel-title">Overview {{elt.host_name}}
-						%if len(elt.display_name) > 0:
-							({{elt.display_name}})
-						%end
-						%for i in range(0, elt.business_impact-2):
-						<img alt="icon state" src="/static/images/star.png">
-						%end
-					</h4>
-				</div>
-				%else:
-				<div class="panel-heading fitted-header cursor" data-toggle="collapse" data-parent="#accordion" href="#collapseOne">
-					<h4 class="panel-title">Overview ({{elt.service_description}}) on {{elt.host.host_name}}
-						%if len(elt.host.display_name) > 0:
-							({{elt.host.display_name}})
-						%end
-						%for i in range(0, elt.business_impact-2):
-						<img alt="icon state" src="/static/images/star.png">
-						%end
-					</h4>
-				</div>
-				%end
-			</div>
-			<div id="collapseOne" class="accordion-body collapse">
-				<div class="fitted-bar ">
-					<table class="col-lg-4 leftmargin">
-						%#Alias, parents and hostgroups are for host only
-						%if elt_type=='host':
-						<tr>
-							<td>Alias:</td>
-							<td>{{elt.alias}}</td>
-						</tr>
-						<tr>
-							<td>Address:</td>
-							<td>{{elt.address}}</td>
-						</tr>
-						<tr>
-							<td>Importance:</td>
-							<td>{{!helper.get_business_impact_text(elt)}}</td>
-						</tr>
-					</table>
-
-					<table class="col-lg-3">
-						<tr>
-							<td>Parents:</td>
-							%if len(elt.parents) > 0:
-							<td>{{','.join([h.get_name() for h in elt.parents])}}</td>
-							%else:
-							<td>No parents</td>
-							%end
-						</tr>
-						<tr>
-							<td>Member of:</td>
-							%if len(elt.hostgroups) > 0:
-							<td>
-							%for hg in elt.hostgroups:
-							<a href="/group/{{hg.get_name()}}" class="link">{{hg.alias}} ({{hg.get_name()}})</a>
-							%end
-							</td>
-							%else:
-							<td> No groups </td>
-							%end
-						</tr>
-						%# End of the host only case, so now service
-						%else:
-						<tr>
-							<td>Host:</td>
-							<td><a href="/host/{{elt.host.host_name}}" class="link">{{elt.host.host_name}}
-							%if len(elt.host.display_name) > 0:
-								({{elt.host.display_name}})
-							%end
-							</a></td>
-						</tr>
-						<tr>
-							<td>Member of:</td>
-							%if len(elt.servicegroups) > 0:
-							<td>{{','.join([sg.get_name() for sg in elt.servicegroups])}}</td>
-							%else:
-							<td> No groups </td>
-							%end
-						</tr>
-						%end
-						<tr>
-							<td>Notes: </td>
-							%if elt.notes != '' and elt.notes_url != '':
-							<td><a href="{{elt.notes_url}}" target=_blank>{{elt.notes}}</a></td>
-							%elif elt.notes == '' and elt.notes_url != '':
-							<td><a href="{{elt.notes_url}}" target=_blank>{{elt.notes_url}}</a></td>
-							%elif elt.notes != '' and elt.notes_url == '':
-							<td>{{elt.notes}}</td>
-							%else:
-							<td>(none)</td>
-							%end
-						</tr>
-					</table>
-
-					<div class="col-lg-4">
-						%#   " If the elements is a root problem with a huge impact and not ack, ask to ack it!"
-						%if elt.is_problem and elt.business_impact > 2 and not elt.problem_has_been_acknowledged:
-						<div style="padding: 10px 35px 5px 15px;" class="alert alert-critical no-bottommargin pulsate row">
-							<div class="col-lg-2 font-white" style="font-size: 30px; padding-top: 0px;"> <i class="icon-bolt"></i> </div>
-							<p class="col-lg-10 font-white">This element has got an important impact on your business, please <b>fix it</b> or <b>acknowledge it</b>.</p>
-							%# "end of the 'SOLVE THIS' highlight box"
-							%end
-						</div>
-					</div>
-				</div>
-
-				%if elt_type=='host':
-				<div class="row">
-					<ul>
-						<li class="col-lg-3"> <span class="icon-stack font-green"> <i class="icon-circle-blank icon-stack-base"></i> <i class="icon-ok"></i></span> <span class="num">{{sOK}}</span> OK</li>
-						<li class="col-lg-3"> <span class="icon-stack font-orange"> <i class="icon-circle-blank icon-stack-base"></i> <i class="icon-exclamation"></i></span> <span class="num">{{sWARNING}}</span> Warning</li>
-						<li class="col-lg-3"> <span class="icon-stack font-red"> <i class="icon-circle-blank icon-stack-base"></i> <i class="icon-arrow-down"></i></span> <span class="num">{{sCRITICAL}}</span> Critical</li>
-						<li class="col-lg-3"> <span class="icon-stack"> <i class="icon-circle-blank icon-stack-base"></i> <i class="icon-question"></i></span> <span class="num">{{sUNKNOWN}}</span> Unknown</li>
-					</ul>
-				</div>
-				%end
-			</div>
-	    </div>
-	</div>
-	<!-- Switch Start -->
-
-	%# By default all is disabled
-	% chk_freshness = chk_active_state = chk_passive_state = not_state =  evt_state = flp_state = 'checked=""'
-	%if not (elt.check_freshness):
-	%chk_freshness = 'unchecked=""'
-	%end
-	%if not (elt.active_checks_enabled):
-	%chk_active_state = 'unchecked=""'
-	%end
-	%if not (elt.passive_checks_enabled):
-	%chk_passive_state = 'unchecked=""'
-	%end
-	%if not elt.notifications_enabled:
-	%not_state = 'unchecked=""'
-	%end
-	%if not elt.event_handler_enabled:
-	%evt_state = 'unchecked=""'
-	%end
-	%if not elt.flap_detection_enabled:
-	%flp_state = 'unchecked=""'
-	%end
-
-	<script type="text/javascript">
-	$(document).ready(function() {
-		$('#btn-active-check').iphoneStyle({
-			resizeContainer: false,
-			resizeHandle: false,
-			onChange : function(elt, b){toggle_checks("{{elt.get_full_name()}}", !b);}
-		});
-
-		$('#btn-passive-check').iphoneStyle({
-			resizeContainer: false,
-			resizeHandle: false,
-			onChange : function(elt, b){toggle_checks("{{elt.get_full_name()}}", !b);}
-		});
-
-		$('#btn-not').iphoneStyle({
-			resizeContainer: false,
-			resizeHandle: false,
-			onChange : function(elt, b){toggle_notifications("{{elt.get_full_name()}}", !b);}
-		});
-
-		$('#btn-evt').iphoneStyle({
-			resizeContainer: false,
-			resizeHandle: false,
-			onChange : function(elt, b){toggle_event_handlers("{{elt.get_full_name()}}", !b);}
-		});
-
-		$('#btn-flp').iphoneStyle({
-			resizeContainer: false,
-			resizeHandle: false,
-			onChange : function(elt, b){toggle_flap_detection("{{elt.get_full_name()}}", !b);}
-
-		});
-	}); 
-	</script>
-
-	<!-- Start -->
-	<div class="row">
-		<!-- Start Host/Services-->
-		<div class="tabbable verticaltabs-container col-sm-4 col-lg-3">
-			<!-- Wrap the Bootstrap Tabs/Pills in this container to position them vertically -->
-			<ul class="nav nav-tabs">
-				%if params['tab_info']=='yes':
-				<li class="active"><a href="#basic" data-toggle="tab">{{elt_type.capitalize()}} Information:</a></li>
-				%end
-				%if params['tab_additional']=='yes':
-				<li><a href="#additional" data-toggle="tab">Additional Informations:</a></li>
-				%end
-				%if params['tab_commands']=='yes':
-				%if app.manage_acl and helper.can_action(user):
-				<li><a href="#commands" data-toggle="tab">Commands:</a></li>
-				%end
-				%end
-				%if params['tab_gesture']=='yes':
-				<li><a href="#gesture" data-toggle="tab">Gesture:</a></li>
-				%end
-			</ul>
-
-			<div class="tab-content">
-				%if params['tab_info']=='yes':
-				<div class="tab-pane fade in active" id="basic">
-					%if elt_type=='host':
-					<h4>Host Information:</h4>
-					%else:
-					<h4>Service Information:</h4>
-					%end:
-
-					<script type="text/javascript">
-					$().ready(function() {
-						$('.truncate').jTruncate({
-							length: 100,
-							minTrail: 0,
-							moreText: "[see all]",
-							lessText: "[hide extra]",
-							ellipsisText: " (truncated)",
-							moreAni: "fast",
-							lessAni: 2000
-						});
-					});
-					</script>
-
-					<table class="">
-						<tr>
-							<td class="column1"><b>Status:</b></td>
-							<td><button class="col-lg-11 btn alert-small alert-{{elt.state.lower()}} quickinforight" data-original-title="since {{helper.print_duration(elt.last_state_change, just_duration=True, x_elts=2)}}">{{elt.state}}</button> </td>
-						</tr>
-						<tr>
-							<td class="column1"><b>Flapping:</b></td>
-							<td><button class="col-lg-11 btn alert-small alert-{{helper.up_down(not elt.is_flapping)}} quickinforight" data-original-title="{{helper.print_float(elt.percent_state_change)}}% state change">{{helper.yes_no(elt.is_flapping)}}</button></td>
-						</tr>
-						<tr>
-							<td class="column1"><b>In Scheduled Downtime?</b></td>
-							<td><button class="col-lg-11 btn alert-small alert-{{helper.up_down(not elt.in_scheduled_downtime)}}" type="button">{{helper.yes_no(elt.in_scheduled_downtime)}}</button></td>
-						</tr>
-					</table>
-					<hr>
-					<div class="truncate">
-						%if len(elt.output) > app.max_output_length:
-							%if app.allow_html_output:
-								<div class='output' rel="tooltip" data-original-title="{{elt.output}}"> {{!helper.strip_html_output(elt.output[:app.max_output_length])}}</div>
-							%else:
-								<div class='output' rel="tooltip" data-original-title="{{elt.output}}"> {{elt.output[:app.max_output_length]}}</div>
-							%end
-						%else:
-							%if app.allow_html_output:
-								<div class='output'> {{!helper.strip_html_output(elt.output)}}</div>
-							%else:
-								<div class='output'> {{elt.output}} </div>
-							%end
-						%end
-						%if elt.long_output:
-							<br/> {{elt.long_output}}
-						%end
-					</div>
-					<hr>
-					<table class="table">
-						<tr>
-							<td class="column1"><b>Last Check:</b></td>
-							<td><span class="quickinfo" data-original-title='Last check was at {{time.asctime(time.localtime(elt.last_chk))}}'>was {{helper.print_duration(elt.last_chk)}}</span></td>
-						</tr>
-						<tr>		
-							<td class="column1"><b>Last State Change:</b></td>
-							<td>{{time.asctime(time.localtime(elt.last_state_change))}}</td>
-						</tr>
-						<tr>										
-							<td class="column1"><b>Current Attempt:</b></td>
-							<td>{{elt.attempt}}/{{elt.max_check_attempts}} ({{elt.state_type}} state)</td>
-						</tr>
-						<tr>		
-							<td class="column1"><b>Next Active Check:</b></td>
-							<td><span class="quickinfo" data-original-title='Next active check at {{time.asctime(time.localtime(elt.next_chk))}}'>{{helper.print_duration(elt.next_chk)}}</span></td>
-						</tr>
-					</table>
-				</div>
-				%end
-
-				%if params['tab_additional']=='yes':
-				<div class="tab-pane fade" id="additional">
-					<script type="text/javascript">
-					$().ready(function() {
-						$('.truncate_perf').jTruncate({
-							length: 50,
-							minTrail: 0,
-							moreText: "[see all]",
-							lessText: "[hide extra]",
-							ellipsisText: " <b>(truncated)</b>",
-							moreAni: "fast",
-							lessAni: 2000
-						});
-					});
-					</script>
-
-					<h4>Additional Informations</h4>
-					<table class="table tabletop">
-						<tbody class="tabletop">
-						<tr class="tabletop">
-							<td class="column1"><b>Performance Data</b></td>
-							%# "If there any perf data?"
-							%if len(elt.perf_data) > 0:
-							<td class="column2 truncate_perf">{{elt.perf_data}}</td>
-							%else:
-							<td class="column2 truncate_perf">&nbsp;</td>
-							%end
-						</tr>
-						<tr>			
-							<td class="column1"><b>Check Latency / Duration</b></td>
-							<td>{{'%.2f' % elt.latency}} / {{'%.2f' % elt.execution_time}} seconds</td>
-						</tr>
-						<tr>			
-							<td class="column1"><b>Last Notification</b></td>
-							<td class="column2">{{helper.print_date(elt.last_notification)}} (notification {{elt.current_notification_number}})</td>
-						</tr>
-						<tr>
-							<td class="column1"><b>Notification interval</b></td>
-							<td class="column2">{{elt.notification_interval}} mn (period : {{elt.notification_period.timeperiod_name}})</td>
-						</tr>
-						<tr>
-							<td class="column1"><b>Current Attempt</b></td>
-							<td class="column2">{{elt.attempt}}/{{elt.max_check_attempts}} ({{elt.state_type}} state)</td>
-						</tr>
-						</tbody>
-					</table>
-					<hr>
-					<div>
-						<div>
-						<span><b>Active checks</b></span>
-						<input {{chk_active_state}} class="iphone" type="checkbox" id='btn-active-check'>
-						</div>
-						<div>
-						<span><b>Passive checks</b></span>
-						<input {{chk_passive_state}} class="iphone" type="checkbox" id='btn-passive-check'>
-						</div>
-						%if (elt.passive_checks_enabled):
-						%if (elt.check_freshness):
-						<span><b>- Freshness check:</b> {{elt.freshness_threshold}}</span>
-						%end
-						%end
-						<div>
-						<span><b>Notifications</b></span>
-						<input {{not_state}} class="iphone" type="checkbox" id='btn-not'>
-						</div>
-						<div>
-						<span><b>Event handler</b></span>
-						<input {{evt_state}} class="iphone" type="checkbox" id='btn-evt'>
-						</div>
-						<div>
-						<span><b>Flap detection</b></span>
-						<input {{flp_state}} class="iphone" type="checkbox" id='btn-flp'>
-						</div>
-					</div>
-				</div>
-				%end
-
-				%if params['tab_commands']=='yes':
-				%if app.manage_acl and helper.can_action(user):
-				<div class="tab-pane fade" id="commands">
-					<h4>Commands</h4>
-					<div>
-						<ul style="padding-top:5px" class="nav nav-list">
-							%disabled_s = ''
-							%if not elt.event_handler:
-							%disabled_s = 'disabled-link'
-							%end
-							<li><a class='{{disabled_s}} {{global_disabled}}' href="javascript:try_to_fix('{{elt.get_full_name()}}')"><i class="icon-pencil"></i> Try to fix it!</a></li>
-							%disabled_s = ''
-							%if elt.problem_has_been_acknowledged:
-							%disabled_s = 'disabled-link'
-							%end
-							<li><a class='{{disabled_s}} {{global_disabled}}' href="/forms/acknowledge/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal"> <img src="/static/img/icons/atwork.png" alt="atwork" height="15" width="17" /> Acknowledge it!</a></li>
-							<li><a class='{{global_disabled}}' href="javascript:recheck_now('{{elt.get_full_name()}}')"><i class="icon-repeat"></i> Recheck now</a></li>
-							<li><a class='{{global_disabled}}' href="/forms/submit_check/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal"><i class="icon-share-alt"></i> Submit Check Result</a></li>
-							<li><a class='disabled-link {{global_disabled}}' href="#"><i class="icon-comment"></i> Send Custom Notification</a></li>
-							<li><a class='{{global_disabled}}' href="/forms/downtime/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal"><i class="icon-fire"></i> Schedule Downtime</a></li>
-							<li class="divider"></li>
-							<li><a class='disabled-link' href="#"><i class="icon-edit"></i> Edit {{elt_type.capitalize()}}</a></li>
-						</ul>
-				    </div>
-				</div>
-				%end
-				%end
-
-				%if params['tab_gesture']=='yes':
-				<div class="tab-pane fade" id="gesture">
-					<h4>Gesture</h4>
-					<canvas id="gestureCanvas" height="200" class="" style="border: 1px solid black;"></canvas>
-					<div class="gesture_button">
-						<img title="By keeping a left click pressed and drawing a check, you will launch an acknowledgement." alt="gesture acknowledge" src="/static/eltdetail/images/gesture-check.png"/> Acknowledge
-					</div>
-					<div class="gesture_button">
-						<img title="By keeping a left click pressed and drawing a circle, you will launch an recheck." alt="gesture recheck" src="/static/eltdetail/images/gesture-circle.png"/> Recheck
-					</div>
-					<div class="gesture_button">
-						<img title="By keeping a left click pressed and drawing a check, you will launch a try to fix command." alt="gesture fix" src="/static/eltdetail/images/gesture-zigzag.png"/> Fix
-					</div>
-				</div>
-				%end
-			</div>
-		</div>
-
-		<!-- Detail info box start -->
-		<div class="col-lg-9 tabbable">
-			<ul class="nav nav-tabs" style="margin-bottom: 12px;">
-				%_go_active = 'active'
-				%if params['tab_custom_views']=='yes':
-				%for cvname in elt.custom_views:
-				<li class="{{_go_active}} cv_pane" data-cv-name="{{cvname}}" data-elt-name='{{elt.get_full_name()}}' id='tab-cv-{{cvname}}'><a class='link_to_tab' href="#cv{{cvname}}" data-toggle="tab">{{cvname.capitalize()}}</a></li>
-					%_go_active = ''
-				%end
-				%end
-
-				%if params['tab_impacts']=='yes':
-				<li class="{{_go_active}}"><a class='link_to_tab' href="#impacts" data-toggle="tab">Services</a></li>
-				%end
-				%if params['tab_comments']=='yes':
-			    <li><a class='link_to_tab' href="#comments" data-toggle="tab">Comments</a></li>
-				%end
-				%if params['tab_downtimes']=='yes':
-				<li><a class='link_to_tab' href="#downtimes" data-toggle="tab">Downtimes</a></li>
-				%end
-				%if params['tab_timeline']=='yes':
-				<li class='timeline_pane'><a class='link_to_tab' href="#timeline" data-toggle="tab" id='tab_to_timeline'>Timeline</a></li>
-				%end
-				%if params['tab_graphs']=='yes':
-				<li><a class='link_to_tab' href="#graphs" data-toggle="tab" id='tab_to_graphs'>Graphs</a></li>
-				%end
-				%if params['tab_depgraph']=='yes':
-				<li><a class='link_to_tab' href="#depgraph" data-toggle="tab" id='tab_to_depgraph'>Impact graph</a></li>
-				%end
-			</ul>
-			
-			<div class="tab-content">
-				<!-- Tab custom views -->
-				%if params['tab_custom_views']=='yes':
-				%_go_active = 'active'
-				%for cvname in elt.custom_views:
-				<div class="tab-pane {{_go_active}}" data-cv-name="{{cvname}}" data-elt-name='{{elt.get_full_name()}}' id="cv{{cvname}}">
-					Cannot load the pane {{cvname}}.
-				</div>
-				%_go_active = ''
-				%end
-				%end
-				<!-- Tab custom views end -->
-
-				<!-- Tab Summary Start-->
-				%if params['tab_impacts']=='yes':
-				<div class="tab-pane {{_go_active}}" id="impacts">
-					<div class='row-fluid well col-lg-12'>
-					<!-- Start of the Whole info pack. We got a row of 2 thing : 
-					left is information, right is related elements -->
-					<div class="row-fluid">
-					<!-- So now it's time for the right part, replaceted elements -->
-					<div class="col-lg-12">
-						<!-- Show our father dependencies if we got some -->
-						%if len(elt.parent_dependencies) > 0:
-						<h4 class="col-lg-10">Root cause:</h4>
-						<a id="togglelink-{{elt.get_dbg_name()}}" href="javascript:toggleBusinessElt('{{elt.get_dbg_name()}}')"> {{!helper.get_button('Show dependency tree', img='/static/images/expand.png')}}</a>
-						<div class="clear"></div>
-						{{!helper.print_business_rules(datamgr.get_business_parents(elt), source_problems=elt.source_problems)}}
-						%end
-
-						<hr/>
-						
-						<!-- If we are an host and not a problem, show our services -->
-						%# " Only print host service if elt is an host of course"
-						%# " If the host is a problem, services will be print in the impacts, so don't"
-						%# " print twice "
-						%if elt_type=='host' and not elt.is_problem:
-						%if len(elt.services) > 0:
-						<h4 class="col-lg-10">My services:</h4>
-						%elif len(elt.parent_dependencies) == 0:
-						<div class="alert alert-info">
-							<p class="font-blue">No services available</p>
-						</div>
-						%end
-						<div class="col-lg-10 host-services">
-							<div class='pull-left'>
-								%_html_id = helper.get_html_id(elt)
-                                {{!helper.print_aggregation_tree(helper.get_host_service_aggregation_tree(elt, app), _html_id)}}
-							</div>
-						</div>
-						%end #of the only host part
-
-						<!-- If we are a root problem and got real impacts, show them! -->
-						%if elt.is_problem and len(elt.impacts) != 0:
-							<h4 class="col-lg-10">My impacts:</h4>
-							<div class='col-lg-10 host-services'>
-								%max_impacts_displayed = 2
-								%nb = 0
-								%for i in helper.get_impacts_sorted(elt):
-								%nb += 1
-								%if nb == max_impacts_displayed+1:
-								<div class="pull-right" id="hidden_impacts_or_services_button">
-									<a href="javascript:show_hidden_impacts_or_services()"> {{!helper.get_button('Show all impacts', img='/static/images/expand.png')}}</a>
-								</div>
-								%end
-								<div class="service {{"hidden_impacts_services" if nb > max_impacts_displayed else ""}}">
-									<div>
-										<img style="width:16px; height:16px" alt="icon state" src="{{helper.get_icon_state(i)}}">
-										<span class='alert-small alert-{{i.state.lower()}}' style="font-size:110%">{{i.state}}</span> for <span style="font-size:110%">{{!helper.get_link(i, short=True)}}</span> since {{helper.print_duration(i.last_state_change, just_duration=True, x_elts=2)}}
-										%for i in range(0, i.business_impact-2):
-										<img alt="icon state" src="/static/images/star.png">
-										%end
-									</div>
-								</div>
-								%# End of this impact
-								%end
-							</div>
-						%# end of the 'is problem' if
-						%end
-						</div><!-- End of the right part -->
-						</div>
-						<!-- End of the row with the 2 blocks-->
-					</div>
-				</div>
-				%end
-				<!-- Tab Summary End-->
-
-				<!-- Tab Comments Start -->
-				%if params['tab_comments']=='yes':
-				<div class="tab-pane" id="comments">
-					<div class='row-fluid well col-lg-12'>
-						<div id="log_container" class="row-fluid">
-							%if len(elt.comments) > 0:
-							<table class="table table-condensed table-hover">
-								<thead>
-									<tr>
-										<th class="col-lg-2">Author</th>
-										<th class="col-lg-6">Comment</th>
-										<th class="col-lg-3">Date</th>
-										<th class="col-lg-1"></th>
-									</tr>
-								</thead>
-								<tbody>
-								%for c in elt.comments:
-									<tr>
-										<td><strong>{{c.author}}</strong></td>
-										<td><strong>{{c.comment}}</strong></td>
-										<td><strong>{{helper.print_date(c.entry_time)}} - {{helper.print_date(c.expire_time)}}</strong></td>
-										<td><a class="icon-trash {{global_disabled}} font-red" href="javascript:delete_comment('{{elt.get_full_name()}}', {{c.id}})"></a></td>
-									</tr>
-								%end
-								</tbody>
-							</table>
-
-							%else:
-							<div class="alert alert-info">
-								<p class="font-blue">No comments available</p>
-							</div>
-							%end
-						</div>
-						
-						<button type="button" class="btn btn-primary btn-sm" href="/forms/comment/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal"><i class="icon-plus"></i> Add a comment</button>
-						<button type="button" class="btn btn-primary btn-sm" href="/forms/comment_delete/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal"><i class="icon-minus"></i> Delete all comments</button>
-					</div>
-				</div>
-				%end
-				<!-- Tab Comments End -->
-
-				<!-- Tab Downtimes Start -->
-				%if params['tab_downtimes']=='yes':
-				<div class="tab-pane" id="downtimes">
-					<div class='row-fluid well col-lg-12'>
-						<div id="log_container" class="row-fluid">
-							%if len(elt.downtimes) > 0:
-							<table class="table table-condensed table-hover">
-							  <thead>
-								<tr>
-								  <th class="col-lg-2"></th>
-								  <th class="col-lg-1"></th>
-								  <th class="col-lg-5"></th>
-								  <th class="col-lg-5"></th>
-								  <th class="col-lg-1"></th>
-								</tr>
-							  </thead>
-							  <tbody>
-								%for dt in elt.downtimes:
-								<tr>
-								  <td><strong>{{dt.author}}</strong></td>
-								  <td><span class="label pull-right">Downtime</span></td>
-								  <td><strong>{{dt.comment}}</strong></td>
-								  <td><strong>{{helper.print_date(dt.start_time)}} - {{helper.print_date(dt.end_time)}}</strong></td>
-								  <td><a class="icon-trash {{global_disabled}} font-red" href="javascript:delete_downtime('{{elt.get_full_name()}}', {{dt.id}})"></a></td>
-								</tr>
-								%end
-							  </tbody>
-							</table>
-
-							%else:
-							<div class="alert alert-info">
-								<p class="font-blue">No downtimes available</p>
-							</div>
-							%end
-						</div>
-						
-						<button type="button" class="btn btn-primary btn-sm" href="/forms/downtime/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal" class="btn btn-primary"><i class="icon-plus"></i> Add a downtime</button>
-						<button type="button" class="btn btn-primary btn-sm" href="/forms/downtime_delete/{{helper.get_uri_name(elt)}}" data-toggle="modal" data-target="#modal" class="btn btn-primary"><i class="icon-minus"></i> Delete all downtimes</button>
-					</div>
-				</div>
-				%end
-				<!-- Tab Downtimes End -->
-
-				<!-- Tab Timeline Start -->
-				%if params['tab_timeline']=='yes':
-				<div class="tab-pane" id="timeline">
-					<div class='row-fluid well col-lg-12'>
-					<div class='row-fluid well col-lg-12 jcrop'>
-						<div id="inner_timeline" data-elt-name='{{elt.get_full_name()}}'>
-							<span class="alert alert-error">Cannot load the timeline graph.</span>
-						</div>
-					</div>
-					</div>
-				</div>
-				%end
-				<!-- Tab Graph End -->
-
-				<!-- Tab Graph Start -->
-				%if params['tab_graphs']=='yes':
-				<div class="tab-pane" id="graphs">
-					%uris = app.get_graph_uris(elt, graphstart, graphend)
-					%if len(uris) == 0:
-					<div class="alert alert-info">
-					    <div class="font-blue"><strong>Oh snap!</strong> No graphs available!</div>
-					</div>
-					<script language="javascript">
-						$('#tab_to_graphs').hide();
-					</script>
-					%else:
-					<!-- <h4>Graphs</h4> -->
-					<div class='row-fluid well col-lg-12'>
-						<!-- Get the uris for the 5 standard time ranges in advance	 -->
-						%now = int(time.time())
-						%fourhours = now - 3600*4
-						%lastday =   now - 86400
-						%lastweek =  now - 86400*7
-						%lastmonth = now - 86400*31
-						%lastyear =  now - 86400*365
-
-						%# Let's get all the uris at once.
-						%uris_4h = app.get_graph_uris(elt, fourhours, now)
-						%uris_1d = app.get_graph_uris(elt, lastday, now)
-						%uris_1w = app.get_graph_uris(elt, lastweek, now)
-						%uris_1m = app.get_graph_uris(elt, lastmonth, now)
-						%uris_1y = app.get_graph_uris(elt, lastyear, now)
-
-						<!-- Use of javascript to change the content of a div!-->
-						<div class='col-lg-2'><a onclick="setHTML(html_4h,{{fourhours}});" > 4 hours</a></div>
-						<div class='col-lg-2'><a onclick="setHTML(html_1d,{{lastday}});" > 1 day</a></div>
-						<div class='col-lg-2'><a onclick="setHTML(html_1w,{{lastweek}});" > 1 week</a></div>
-						<div class='col-lg-2'><a onclick="setHTML(html_1m,{{lastmonth}});" > 1 month</a></div>
-						<div class='col-lg-2'><a onclick="setHTML(html_1y,{{lastyear}});" > 1 year</a></div>
-					</div>
-
-					<script language="javascript">
-					function setHTML(html,start) {
-						<!-- change the content of the div --!>
-						document.getElementById("real_graphs").innerHTML=html;
-
-						<!-- and call the jcrop javascript --!>
-						$('.jcropelt').Jcrop({
-							onSelect: update_coords,
-							onChange: update_coords
-						});
-						graphstart=start;
-						get_range();
-					}
-
-					<!-- let's create the html content for each time range --!>
-					<!-- This is quite ugly here. I do the same thing 4 times --!->
-					<!-- someone said "function" ? You're right.--!>
-					<!-- but the mix between python and javascript is not a easy thing for me --!>
-					html_4h='<p>';
-					html_1d='<p>';
-					html_1w='<p>';
-					html_1m='<p>';
-					html_1y='<p>';
-
-					%for g in uris_4h:
-					%(img_src, link) = app.get_graph_img_src( g['img_src'], g['link'])
-					var img_src="{{img_src}}";
-					html_4h = html_4h + '<img src="'+ img_src.replace("'","\'") +'" class="jcropelt"/>';
-					html_4h = html_4h + '<a href="{{link}}" class="btn"><i class="icon-plus"></i> Show more</a>';
-					html_4h = html_4h + '<a href="javascript:graph_zoom(\'/{{elt_type}}/{{elt.get_full_name()}}?\')" class="btn"><i class="icon-zoom-in"></i> Zoom</a>';
-					html_4h = html_4h + '<br>';
-					%end
-					html_4h=html_4h+'</p>';
-
-					%for g in uris_1d:
-					%(img_src, link) = app.get_graph_img_src( g['img_src'], g['link'])
-					var img_src="{{img_src}}";
-					html_1d = html_1d +'<img src="'+ img_src.replace("'","\'") +'" class="jcropelt"/>';
-					html_1d = html_1d + '<a href={{link}}" class="btn"><i class="icon-plus"></i> Show more</a>';
-					html_1d = html_1d + '<a href="javascript:graph_zoom(\'/{{elt_type}}/{{elt.get_full_name()}}?\')" class="btn"><i class="icon-zoom-in"></i> Zoom</a>';
-					html_1d = html_1d + '<br>';
-					%end
-					html_1d=html_1d+'</p>';
-
-					%for g in uris_1w:
-					%(img_src, link) = app.get_graph_img_src( g['img_src'], g['link'])
-					var img_src="{{img_src}}";
-					html_1w = html_1w + '<img src="'+ img_src.replace("'","\'") +'" class="jcropelt"/>';
-					html_1w = html_1w + '<a href="{{link}}" class="btn"><i class="icon-plus"></i> Show more</a>';
-					html_1w = html_1w + '<a href="javascript:graph_zoom(\'/{{elt_type}}/{{elt.get_full_name()}}?\')" class="btn"><i class="icon-zoom-in"></i> Zoom</a>';
-					html_1w = html_1w + '<br>';
-					%end
-
-					%for g in uris_1m:
-					%(img_src, link) = app.get_graph_img_src( g['img_src'], g['link'])
-					var img_src="{{img_src}}";
-					html_1m = html_1m + '<img src="'+ img_src.replace("'","\'") +'" class="jcropelt"/>';
-					html_1m = html_1m + '<a href="{{link}}" class="btn"><i class="icon-plus"></i> Show more</a>';
-					html_1m = html_1m + '<a href="javascript:graph_zoom(\'/{{elt_type}}/{{elt.get_full_name()}}?\')" class="btn"><i class="icon-zoom-in"></i> Zoom</a>';
-					html_1m = html_1m + '<br>';
-					%end
-
-					%for g in uris_1y:
-					%(img_src, link) = app.get_graph_img_src( g['img_src'], g['link'])
-					var img_src="{{img_src}}";
-					html_1y = html_1y + '<img src="'+ img_src.replace("'","\'") +'" class="jcropelt"/>';
-					html_1y = html_1y + '<a href="{{link}}" class="btn"><i class="icon-plus"></i> Show more</a>';
-					html_1y = html_1y + '<a href="javascript:graph_zoom(\'/{{elt_type}}/{{elt.get_full_name()}}?\')" class="btn"><i class="icon-zoom-in"></i> Zoom</a>';
-					html_1y = html_1y + '<br>';
-					%end
+   %groups=elt_service.servicegroups if elt_service else elt_host.hostgroups
+   %tags=elt_service.get_service_tags() if elt_service else elt_host.get_host_tags()
 
 
-					</script>
+   <!-- First row : tags and actions ... -->
+   %if elt.action_url or tags or groups:
+   <div>
+      %if groups:
+      <div class="btn-group pull-right">
+         <button class="btn btn-primary btn-xs"><i class="fa fa-sitemap"></i> Groups</button>
+         <button class="btn btn-primary btn-xs dropdown-toggle" data-toggle="dropdown"><span class="caret"></span></button>
+         <ul class="dropdown-menu pull-right">
+         %for g in groups:
+            <li>
+            <a href="/{{elt_type}}s-group/{{g.get_name()}}">{{g.alias if g.alias else g.get_name()}}</a>
+            </li>
+         %end
+         </ul>
+      </div>
+      <div class="pull-right">&nbsp;&nbsp;</div>
+      %end
+      %if elt.action_url != '':
+      <div class="btn-group pull-right">
+         %action_urls = elt.action_url.split('|')
+         <button class="btn btn-info btn-xs"><i class="fa fa-external-link"></i> {{'Action' if len(action_urls) == 1 else 'Actions'}}</button>
+         <button class="btn btn-info btn-xs dropdown-toggle" data-toggle="dropdown"><span class="caret"></span></button>
+         <!-- Do not know why but MacroResolver sometimes throws an exception !!! -->
+         <ul class="dropdown-menu pull-right">
+            %for action_url in helper.get_element_actions_url(elt, default_title="Url", default_icon="globe", popover=True):
+            <li>{{!action_url}}</li>
+            %end
+         </ul>
+      </div>
+      <div class="pull-right">&nbsp;&nbsp;</div>
+      %end
+      %if tags:
+      %tag=elt_type[0]+'tag'
+      <div class="btn-group pull-right">
+         %for t in sorted(tags):
+            <a href="/all?search={{tag}}:{{t}}">
+               %if app.tag_as_image:
+               <img src="/tag/{{t.lower()}}" alt="{{t.lower()}}" =title="Tag: {{t.lower()}}" style="height: 24px"></img>
+               %else:
+               <button class="btn btn-default btn-xs"><i class="fa fa-tag"></i> {{t.lower()}}</button>
+               %end
+            </a>
+         %end
+      </div>
+      %end
+   </div>
+   %end
 
-					<div class='row-fluid well col-lg-12 jcrop'>
-						<div id='real_graphs'>
-						<!-- Let's keep this part visible. This is the custom and default range -->
-						%for g in uris:
-							%(img_src, link) = app.get_graph_img_src( g['img_src'], g['link'])
-							<p>
-								<img src="{{img_src}}" class="jcropelt"/>
-								<a href="{{link}}" class="btn"><i class="icon-plus"></i> Show more</a>
-								<a href="javascript:graph_zoom('/{{elt_type}}/{{elt.get_full_name()}}?')" class="btn"><i class="icon-zoom-in"></i> Zoom</a>
-							</p>
-						%end      
-						</div>
-					</div>
-					%end
-				</div>
-				%end
-				<!-- Tab Graph End -->
+   <!-- Second row : host/service overview ... -->
+   <div class="panel panel-default">
+      <div class="panel-heading fitted-header cursor" data-toggle="collapse" data-parent="#Overview" href="#collapseOverview">
+         <h4 class="panel-title"><span class="caret"></span>&nbsp;Overview {{elt_display_name}} {{!helper.get_business_impact_text(elt.business_impact)}}</h4>
+      </div>
+  
+      <div id="collapseOverview" class="panel-body panel-collapse collapse">
+         %if elt_type=='host':
+         <dl class="col-sm-6 dl-horizontal">
+            <dt>Alias:</dt>
+            <dd>{{elt_host.alias}}</dd>
 
-				<!-- Tab Dep graph Start -->
-				%if params['tab_depgraph']=='yes':
-				<script>
-				$(function() {
-					$('#supported').text('Supported/allowed: ' + !!screenfull.enabled);
-					if (!screenfull.enabled) {
-						return false;
-					}
+            <dt>Address:</dt>
+            <dd>{{elt_host.address}}</dd>
 
-					$('#fullscreen-request').click(function() {
-						screenfull.request($('#inner_depgraph')[0]);
-					});
+            <dt>Importance:</dt>
+            <dd>{{!helper.get_business_impact_text(elt.business_impact, True)}}</dd>
+         </dl>
+        
+         <dl class="col-sm-6 dl-horizontal">
+            <dt>Parents:</dt>
+            %if elt_host.parents:
+            <dd>
+            %parents=['<a href="/host/'+parent.host_name+'" class="link">'+parent.display_name+'</a>' for parent in sorted(elt_host.parents,key=lambda x:x.display_name)]
+            {{!','.join(parents)}}
+            </dd>
+            %else:
+            <dd>(none)</dd>
+            %end
 
-					// Trigger the onchange() to set the initial values
-					screenfull.onchange();
-				});
-				</script>
-				<div class="tab-pane" id="depgraph" class="col-lg-12">
-					<div class='row-fluid well col-lg-12 jcrop'>
-						<div class="btn-group btn-group-sm pull-right">
-							<button type="button" id="fullscreen-request" class="btn btn-primary"><i class="icon-plus"></i> Fullscreen</button>
-						</div>
-						<div id="inner_depgraph" data-elt-name='{{elt.get_full_name()}}'>
-							<span class="alert alert-error">Cannot load dependency graph.</span>
-						</div>
-					</div>
-				</div>
-				%end
-				<!-- Tab Dep graph End -->
-			</div>
-		<!-- Detail info box end -->
-		</div>
-		<!-- End ... -->
-	</div>
+            <dt>Children:</dt>
+            %if elt_host.childs:
+            <dd>
+            %children=['<a href="/host/'+child.host_name+'" class="link">'+child.display_name+'</a>' for child in sorted(elt_host.childs,key=lambda x:x.display_name)]
+            {{!','.join(children)}}
+            </dd>
+            %else:
+            <dd>(none)</dd>
+            %end
+         </dl>
+
+         <dl class="col-sm-6 dl-horizontal">
+            <dt>Member of:</dt>
+            %if elt_host.hostgroups:
+            <dd>
+            %for hg in elt_host.hostgroups:
+            <a href="/hosts-group/{{hg.get_name()}}" class="link">{{hg.alias if hg.alias else hg.get_name()}}</a>
+            %end
+            </dd>
+            %else:
+            <dd>(none)</dd>
+            %end
+
+            <dt>Notes:</dt>
+            <dd>
+            %for note_url in helper.get_element_notes_url(elt, default_title="Note", default_icon="tag", popover=True):
+               <button class="btn btn-default btn-xs">{{! note_url}}</button>
+            %end
+            </dd>
+         </dl>
+         %else:
+         <dl class="col-sm-6 dl-horizontal">
+            <dt>Host:</dt>
+            <dd>
+               <a href="/host/{{elt_host.host_name}}" class="link">{{elt_host.display_name}}</a>
+            </dd>
+
+            <dt>Importance:</dt>
+            <dd>{{!helper.get_business_impact_text(elt.business_impact, True)}}</dd>
+         </dl>
+        
+         <dl class="col-sm-6 dl-horizontal">
+            <dt>Member of:</dt>
+            %if elt_service.servicegroups:
+            <dd>
+            %for sg in elt_service.servicegroups:
+            <a href="/services-group/{{sg.get_name()}}" class="link">{{sg.alias}} ({{sg.get_name()}})</a>
+            %end
+            </dd>
+            %else:
+            <dd>(none)</dd>
+            %end
+
+            <dt>Notes: </dt>
+            %if elt.notes != '' and elt.notes_url != '':
+            <dd><a href="{{elt.notes_url}}" target=_blank>{{elt.notes}}</a></dd>
+            %elif elt.notes == '' and elt.notes_url != '':
+            <dd><a href="{{elt.notes_url}}" target=_blank>{{elt.notes_url}}</a></dd>
+            %elif elt.notes != '' and elt.notes_url == '':
+            <dd>{{elt.notes}}</dd>
+            %else:
+            <dd>(none)</dd>
+            %end
+         </dl>
+         %end
+      </div>
+   </div>
+
+   <!-- Third row : business impact alerting ... -->
+   %if app.can_action() and elt.is_problem and elt.business_impact > 2 and not elt.problem_has_been_acknowledged:
+   <div class="panel panel-default">
+      <div class="panel-heading" style="padding-bottom: -10">
+         <div class="aroundpulse pull-left" style="padding: 8px;">
+            <span class="big-pulse pulse"></span>
+            <i class="fa fa-3x fa-spin fa-gear"></i>
+         </div>
+         <div style="margin-left: 60px;">
+         %disabled_ack = '' if elt.is_problem and not elt.problem_has_been_acknowledged else 'disabled'
+         %disabled_fix = '' if elt.is_problem and elt.event_handler_enabled and elt.event_handler else 'disabled'
+         <p class="alert alert-danger" style="margin-bottom:0">This element has an important impact on your business, you may 
+         <a href="#" action="add-acknowledge" class="{{disabled_ack}} btn btn-primary btn-xs" title="Acknowledge this {{elt_type}} problem" data-element="{{helper.get_uri_name(elt)}}"><i class="fa fa-check"></i> acknowledge it</a>
+         or 
+         <a href="#" action="event-handler" class="{{disabled_fix}} btn btn-primary btn-xs" title="Launch the event handler for this {{elt_type}}" data-element="{{helper.get_uri_name(elt)}}"><i class="fa fa-magic"></i> try to fix it</a>.</p>
+         </div>
+      </div>
+   </div>
+   %end
+  
+   <!-- Third row (bis) : business rule ... -->
+   %if business_rule:
+   <div class="panel panel-default">
+      <div class="panel-heading" style="padding-bottom: -10">
+         <div class="aroundpulse pull-left" style="padding: 8px;">
+            <span class="big-pulse pulse"></span>
+            <i class="fa fa-2x fa-university"></i>
+         </div>
+         <div style="margin-left: 60px;">
+            <p class="alert alert-warning" style="margin-bottom:0">This element is a business rule.</p>
+         </div>
+      </div>
+   </div>
+   %end
+  
+   %if elt_type=='host':
+   %synthesis = helper.get_synthesis(elt.services)
+   %s = synthesis['services']
+   <div class="panel panel-default">
+     <div class="panel-body">
+       <table class="table table-invisible table-condensed">
+         <tbody>
+           <tr>
+             <td>
+               <a role="menuitem" href="/all?search=type:service {{elt_name}}">
+                  <b>{{s['nb_elts']}} services:&nbsp;</b> 
+               </a>
+             </td>
+
+             %for state in 'ok', 'warning', 'critical', 'pending', 'unknown', 'ack', 'downtime':
+             <td>
+               %if s['nb_' + state]>0:
+               <a role="menuitem" href="/all?search=type:service is:{{state}} {{elt_name}}">
+               %end
+                  %label = "%s <i>(%s%%)</i>" % (s['nb_' + state], s['pct_' + state])
+                  {{!helper.get_fa_icon_state_and_label(cls='service', state=state, label=label, disabled=(not s['nb_' + state]))}}
+               %if s['nb_' + state]>0:
+               </a>
+               %end
+             </td>
+             %end
+           </tr>
+         </tbody>
+       </table>
+     </div>
+   </div>
+   %end
+
+   <!-- Fourth row : host/service information -->
+   <div>
+      <!-- Detail info box start -->
+         <ul class="nav nav-tabs">
+            %_go_active = 'active'
+            %for cvname in elt.custom_views:
+               %cvconf = 'default'
+               %if '/' in cvname:
+                  %cvconf = cvname.split('/')[1]
+                  %cvname = cvname.split('/')[0]
+               %end
+               <li class="{{_go_active}} cv_pane" data-name="{{cvname}}" data-conf="{{cvconf}}" data-element='{{elt.get_full_name()}}' id='tab-cv-{{cvname}}-{{cvconf}}'><a href="#cv{{cvname}}_{{cvconf}}" data-toggle="tab">{{cvname.capitalize()}}{{'/'+cvconf.capitalize() if cvconf!='default' else ''}}</a></li>
+               %_go_active = ''
+            %end
+
+            <li class="{{_go_active}}"><a href="#information" data-toggle="tab">Information</a></li>
+            <li><a href="#impacts" data-toggle="tab">{{'Services' if elt_type == 'host' else 'Impacts'}}</a></li>
+            %if elt.customs:
+            <li><a href="#configuration" data-toggle="tab">Configuration</a></li>
+            %end
+            %if app.can_action():
+            <li><a href="#commands" data-toggle="tab">Commands</a></li>
+            %end
+            <li><a href="#comments" data-toggle="tab">Comments</a></li>
+            <li><a href="#downtimes" data-toggle="tab">Downtimes</a></li>
+            <!--<li class="timeline_pane"><a href="#timeline" data-toggle="tab">Timeline</a></li>-->
+            <li><a href="#metrics" data-toggle="tab">Metrics</a></li>
+            %if app.graphs_module.is_available():
+            <li><a href="#graphs" data-toggle="tab">Graphs</a></li>
+            %end
+            <li><a href="#depgraph" data-toggle="tab">Impact graph</a></li>
+            %if app.logs_module.is_available():
+            <li><a href="#history" data-toggle="tab">History</a></li>
+            %end
+            %if app.logs_module.is_available():
+            <li><a href="#availability" data-toggle="tab">Availability</a></li>
+            %end
+            %if app.helpdesk_module.is_available():
+            <li><a href="#helpdesk" data-toggle="tab">Helpdesk</a></li>
+            %end
+         </ul>
+         
+         <div class="tab-content">
+            <!-- Tab custom views -->
+            %_go_active = 'active'
+            %_go_fadein = 'in'
+            %cvs = []
+            %[cvs.append(item) for item in elt.custom_views if item not in cvs]
+            %for cvname in cvs:
+               %cvconf = 'default'
+               %if '/' in cvname:
+                  %cvconf = cvname.split('/')[1]
+                  %cvname = cvname.split('/')[0]
+               %end
+               <div class="tab-pane fade {{_go_active}} {{_go_fadein}}" data-name="{{cvname}}" data-conf="{{cvconf}}" data-element="{{elt.get_full_name()}}" id="cv{{cvname}}_{{cvconf}}">
+                  <div class="panel panel-default">
+                     <div class="panel-body">
+                        <span class="alert alert-error">Sorry, I cannot load the {{cvname}}/{{cvconf}} view!</span>
+                     </div>
+                  </div>
+               </div>
+               %_go_active = ''
+               %_go_fadein = ''
+            %end
+            <!-- Tab custom views end -->
+
+            <!-- Tab Information start-->
+            <div class="tab-pane fade {{_go_active}} {{_go_fadein}}" id="information">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div class="col-lg-6">
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Status:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              <tr>
+                                 <td><strong>Status:</strong></td>
+                                 <td>
+                                    {{! helper.get_fa_icon_state(obj=elt, label='title')}}
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Since:</strong></td>
+                                 <td>
+                                    {{! helper.print_duration(elt.last_state_change, just_duration=True, x_elts=2)}}
+                                 </td>
+                              </tr>
+                           </tbody>
+                        </table>
+                   
+                        <table class="table table-condensed table-nowrap">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Last check:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              <tr>
+                                 <td><strong>Last Check:</strong></td>
+                                 <td><span class="popover-dismiss" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" data-content="Last check was at {{time.asctime(time.localtime(elt.last_chk))}}">was {{helper.print_duration(elt.last_chk)}}</span></td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Output:</strong></td>
+                                 <td class="popover-dismiss" 
+                                       data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" 
+                                       data-title="{{elt.get_full_name()}} check output" 
+                                       data-content=" {{elt.output}}{{'<br/>'+elt.long_output.replace('\n', '<br/>') if elt.long_output else ''}}"
+                                       >
+                                  {{!helper.strip_html_output(elt.output) if app.allow_html_output else elt.output}}
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Performance data:</strong></td>
+                                 <td class="popover-dismiss ellipsis" 
+                                       data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" 
+                                       data-title="{{elt.get_full_name()}} performance data" 
+                                       data-content=" {{elt.perf_data if elt.perf_data else '(none)'}}"
+                                       >
+                                  {{elt.perf_data if elt.perf_data else '(none)'}}
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Check latency / duration:</strong></td>
+                                 <td>
+                                    {{'%.2f' % elt.latency}} / {{'%.2f' % elt.execution_time}} seconds
+                                 </td>
+                              </tr>
+                              
+                              <tr>
+                                 <td><strong>Last State Change:</strong></td>
+                                 <td><span class="popover-dismiss" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" data-content="Last state change at {{time.asctime(time.localtime(elt.last_state_change))}}">{{helper.print_duration(elt.last_state_change)}}</span></td>
+                              </tr>
+                              <tr>                             
+                                 <td><strong>Current Attempt:</strong></td>
+                                 <td>{{elt.attempt}}/{{elt.max_check_attempts}} ({{elt.state_type}} state)</td>
+                              </tr>
+                              <tr>     
+                                 <td><strong>Next Active Check:</strong></td>
+                                 <td><span class="popover-dismiss" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="bottom" data-content="Next active check at {{time.asctime(time.localtime(elt.next_chk))}}">{{helper.print_duration(elt.next_chk)}}</span></td>
+                              </tr>
+                           </tbody>
+                        </table>
+                              
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Checks configuration:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              %if hasattr(elt, "check_period") and hasattr(elt.check_period, "get_name"):
+                              <tr>
+                                 <td><strong>Check period:</strong></td>
+                                 %tp=app.datamgr.get_timeperiod(elt.check_period.get_name())
+                                 <td name="check_period" class="popover-dismiss" 
+                                       data-html="true" data-toggle="popover" data-trigger="hover" data-placement="left" 
+                                       data-title='{{tp.alias if hasattr(tp, "alias") else tp.timeperiod_name}}' 
+                                       data-content='{{!helper.get_timeperiod_html(tp)}}'
+                                       >
+                                 {{! helper.get_on_off(elt.check_period.is_time_valid(now), 'Is element check period currently active?')}}
+                                 <a href="/timeperiods">{{elt.check_period.alias}}</a>
+                                 </td>
+                              </tr>
+                              %else:
+                              <tr>
+                                 <td><strong>No defined check period!</strong></td>
+                                 <td></td>
+                              </tr>
+                              %end
+                              %if elt.maintenance_period is not None:
+                              <tr>
+                                 <td><strong>Maintenance period:</strong></td>
+                                 <td name="maintenance_period" class="popover-dismiss" 
+                                       data-html="true" data-toggle="popover" data-trigger="hover" data-placement="left" 
+                                       data-title='{{tp.alias if hasattr(tp, "alias") else tp.timeperiod_name}}'
+                                       data-content='{{!helper.get_timeperiod_html(tp)}}'
+                                       >
+                                 {{! helper.get_on_off(elt.maintenance_period.is_time_valid(now), 'Is element maintenance period currently active?')}}
+                                 <a href="/timeperiods">{{elt.maintenance_period.alias}}</a>
+                                 </td>
+                              </tr>
+                              %end
+                              <tr>
+                                 <td><strong>Check command:</strong></td>
+                                 <td>
+                                    <a href="/commands#{{elt.get_check_command()}}">{{elt.get_check_command()}}</a>
+                                 </td>
+                                 <td>
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Active checks:</strong></td>
+                                 <td>
+                                    <input type="checkbox" {{'checked' if elt.active_checks_enabled else ''}} 
+                                          class="switch" data-size="mini" data-on-color="success" data-off-color="danger"
+                                          data-type="action" action="toggle-active-checks" 
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.active_checks_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              %if (elt.active_checks_enabled):
+                              <tr>
+                                 <td><strong>Check interval:</strong></td>
+                                 <td>{{elt.check_interval}} minutes</td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Retry interval:</strong></td>
+                                 <td>{{elt.retry_interval}} minutes</td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Max check attempts:</strong></td>
+                                 <td>{{elt.max_check_attempts}}</td>
+                              </tr>
+                              %end
+                              <tr>
+                                 <td><strong>Passive checks:</strong></td>
+                                 <td>
+                                    <input type="checkbox" {{'checked' if elt.passive_checks_enabled else ''}} 
+                                          class="switch" data-size="mini" data-on-color="success" data-off-color="danger"
+                                          data-type="action" action="toggle-passive-checks"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.passive_checks_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              %if (elt.passive_checks_enabled):
+                              <tr>
+                                 <td><strong>Freshness check:</strong></td>
+                                 <td>{{! helper.get_on_off(elt.check_freshness, 'Is freshness check enabled?')}}</td>
+                              </tr>
+                              %if (elt.check_freshness):
+                              <tr>
+                                 <td><strong>Freshness threshold:</strong></td>
+                                 <td>{{elt.freshness_threshold}} seconds</td>
+                              </tr>
+                              %end
+                              %end
+                              <tr>
+                                 <td><strong>Process performance data:</strong></td>
+                                 <td>{{! helper.get_on_off(elt.process_perf_data, 'Is perfdata process enabled?')}}</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Event handler:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              <tr>
+                                 <td><strong>Event handler enabled:</strong></td>
+                                 <td>
+                                    <input type="checkbox" {{'checked' if elt.event_handler_enabled else ''}}
+                                          class="switch" data-size="mini" data-on-color="success" data-off-color="danger"
+                                          data-type="action" action="toggle-event-handler"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.event_handler_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              %if elt.event_handler_enabled and elt.event_handler:
+                              <tr>
+                                 <td><strong>Event handler:</strong></td>
+                                 <td>
+                                    <a href="/commands#{{elt.event_handler.get_name()}}">{{ elt.event_handler.get_name() }}</a>
+                                 </td>
+                              </tr>
+                              %end
+                              %if elt.event_handler_enabled and not elt.event_handler:
+                              <tr>
+                                 <td></td>
+                                 <td><strong>No event handler defined!</strong></td>
+                              </tr>
+                              %end
+                           </tbody>
+                        </table>
+                     </div>
+                     <div class="col-lg-6">
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Flapping detection:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              <tr>
+                                 <td><strong>Flapping detection:</strong></td>
+                                 <td>
+                                    <input type="checkbox" {{'checked' if elt.flap_detection_enabled else ''}}
+                                          class="switch" data-size="mini" data-on-color="success" data-off-color="danger"
+                                          data-type="action" action="toggle-flap-detection"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.flap_detection_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              %if elt.flap_detection_enabled:
+                              <tr>
+                                 <td><strong>Options:</strong></td>
+                                 <td>{{', '.join(elt.flap_detection_options)}}</td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Low threshold:</strong></td>
+                                 <td>{{elt.low_flap_threshold}}</td>
+                              </tr>
+                              <tr>
+                                 <td><strong>High threshold:</strong></td>
+                                 <td>{{elt.high_flap_threshold}}</td>
+                              </tr>
+                              %end
+                           </tbody>
+                        </table>
+
+                        %if elt.stalking_options and elt.stalking_options[0]:
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Stalking options:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              <tr>
+                                 <td><strong>Options:</strong></td>
+                                 <td>{{', '.join(elt.stalking_options)}}</td>
+                              </tr>
+                           </tbody>
+                        </table>
+                        %end
+
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 40%" />
+                              <col style="width: 60%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Notifications:</th>
+                              </tr>
+                           </thead>
+                           <tbody style="font-size:x-small;">
+                              <tr>
+                                 <td><strong>Notifications:</strong></td>
+                                 <td>
+                                    <input type="checkbox" {{'checked' if elt.notifications_enabled else ''}} 
+                                          class="switch" data-size="mini" data-on-color="success" data-off-color="danger"
+                                          data-type="action" action="toggle-notifications"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.notifications_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              %if elt.notifications_enabled and elt.notification_period:
+                              <tr>
+                                 <td><strong>Notification period:</strong></td>
+                                 %tp=app.datamgr.get_timeperiod(elt.notification_period.get_name())
+                                 <td name="notification_period" class="popover-dismiss" data-html="true" data-toggle="popover" data-trigger="hover" data-placement="left" 
+                                       data-title='{{tp.alias if hasattr(tp, "alias") else tp.timeperiod_name}}' 
+                                       data-content='{{!helper.get_timeperiod_html(tp)}}'>
+                                    {{! helper.get_on_off(elt.notification_period.is_time_valid(now), 'Is element notification period currently active?')}}
+                                    <a href="/timeperiods">{{elt.notification_period.alias}}</a>
+                                 </td>
+                              </tr>
+                              <tr>
+                                 %if elt_type=='host':
+                                    %message = {}
+                                    %# [d,u,r,f,s,n]
+                                    %message['d'] = 'Down'
+                                    %message['u'] = 'Unreachable'
+                                    %message['r'] = 'Recovery'
+                                    %message['f'] = 'Flapping'
+                                    %message['s'] = 'Downtimes'
+                                    %message['n'] = 'None'
+                                 %else:
+                                    %message = {}
+                                    %# [w,u,c,r,f,s,n]
+                                    %message['w'] = 'Warning'
+                                    %message['u'] = 'Unknown'
+                                    %message['c'] = 'Critical'
+                                    %message['r'] = 'Recovery'
+                                    %message['f'] = 'Flapping'
+                                    %message['s'] = 'Downtimes'
+                                    %message['n'] = 'None'
+                                 %end
+                                 <td><strong>Notification options:</strong></td>
+                                 <td>
+                                 %for m in message:
+                                    {{! helper.get_on_off(m in elt.notification_options, '', message[m]+'&nbsp;')}}
+                                 %end
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Last notification:</strong></td>
+                                 <td>{{helper.print_date(elt.last_notification)}} (notification {{elt.current_notification_number}})</td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Notification interval:</strong></td>
+                                 <td>{{elt.notification_interval}} mn</td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Contacts:</strong></td>
+                                 <td>
+                                   %contacts = [c for c in elt.contacts if app.datamgr.get_contact(c.contact_name, user)]
+                                   %for c in contacts:
+                                   <a href="/contact/{{c.contact_name}}">{{ c.alias if c.alias and c.alias != 'none' else c.contact_name }}</a>, 
+                                   %end
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Contacts groups:</strong></td>
+                                 <td>
+                                   %contact_groups = [c for c in elt.contact_groups if app.datamgr.get_contactgroup(c, user)]
+                                   {{!', '.join(contact_groups)}}
+                                 </td>
+                              </tr>
+                              %end
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <!-- Tab Information end -->
+
+             <!-- Tab Impacts start -->
+            <div class="tab-pane fade" id="impacts">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div class="{{'col-lg-6'}} if elt_type =='host' else 'col-lg-12'">
+                        %displayed_services=False
+                        <!-- Show our father dependencies if we got some -->
+                        %if elt.parent_dependencies:
+                        <h4>Root cause:</h4>
+                        {{!helper.print_business_rules(app.datamgr.get_business_parents(elt), source_problems=elt.source_problems)}}
+                        %end
+
+                        <!-- If we are an host and not a problem, show our services -->
+                        %if elt_type=='host' and not elt.is_problem:
+                        %if elt.services:
+                        %displayed_services=True
+                        <h4>My services:</h4>
+                        <div class="services-tree">
+                          {{!helper.print_aggregation_tree(helper.get_host_service_aggregation_tree(elt, app), helper.get_html_id(elt), expanded=False, max_sons=3)}}
+                        </div>
+                        %elif not elt.parent_dependencies:
+                        <h4>No services!</h4>
+                        %end
+                        %end #of the only host part
+
+                        <!-- If we are a root problem and got real impacts, show them! -->
+                        %if elt.is_problem and elt.impacts:
+                        <h4>My impacts:</h4>
+                        <div class='host-services'>
+                           %s = ""
+                           <ul>
+                           %for svc in helper.get_impacts_sorted(elt):
+                              %s += "<li>"
+                              %s += helper.get_fa_icon_state(svc)
+                              %s += helper.get_link(svc, short=True)
+                              %s += "(" + helper.get_business_impact_text(svc.business_impact) + ")"
+                              %s += """ is <span class="font-%s"><strong>%s</strong></span>""" % (svc.state.lower(), svc.state)
+                              %s += " since %s" % helper.print_duration(svc.last_state_change, just_duration=True, x_elts=2)
+                              %s += "</li>"
+                           %end
+                           {{!s}}
+                           </ul>
+                        </div>
+                        %# end of the 'is problem' if
+                        %end
+                     </div>
+                     %if elt_type=='host':
+                     <div class="col-lg-6">
+                        %if not displayed_services:
+                        <!-- Show our own services  -->
+                        <h4>My services:</h4>
+                        <div>
+                          {{!helper.print_aggregation_tree(helper.get_host_service_aggregation_tree(elt, app), helper.get_html_id(elt))}}
+                        </div>
+                        %end
+                     </div>
+                     %end
+                  </div>
+               </div>
+            </div>
+            <!-- Tab Impacts end -->
+
+           <!-- Tab Configuration start -->
+            %if elt.customs:
+            <div class="tab-pane fade" id="configuration">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <table class="table table-condensed table-bordered">
+                        <colgroup>
+                           %if app.can_action():
+                           <col style="width: 30%" />
+                           <col style="width: 60%" />
+                           <col style="width: 10%" />
+                           %else:
+                           <col style="width: 40%" />
+                           <col style="width: 60%" />
+                           %end
+                        </colgroup>
+                        <thead>
+                           <tr>
+                              <th colspan="3">Customs:</th>
+                           </tr>
+                        </thead>
+                        <tbody style="font-size:x-small;">
+                        %for var in sorted(elt.customs):
+                           <tr>
+                              <td>{{var}}</td>
+                              <td>{{elt.customs[var]}}</td>
+                              %if app.can_action():
+                              <td>
+                                 <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                                       data-type="action" action="change-variable"
+                                       data-toggle="tooltip" data-placement="bottom" title="Change a custom variable for this {{elt_type}}"
+                                       data-element="{{helper.get_uri_name(elt)}}" data-variable="{{var}}" data-value="{{elt.customs[var]}}"
+                                       >
+                                    <i class="fa fa-gears"></i> Change 
+                                 </button>
+                              </td>
+                              %end
+                           </tr>
+                        %end
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            </div>
+            %end
+            <!-- Tab Configuration end -->
+            
+            <!-- Tab Commands start -->
+            %if app.can_action():
+            <div class="tab-pane fade" id="commands">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+
+                     <div class="col-sm-6">
+                        <table class="table table-condensed">
+                           <colgroup>
+                              <col style="width: 60%" />
+                              <col style="width: 40%" />
+                           </colgroup>
+                           <thead>
+                              <tr>
+                                 <th colspan="2">Toggle current:</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              <tr>
+                                 <td><strong>Active checks enabled:</strong></td>
+                                 <td>
+                                    <input type="checkbox" class="switch" {{'checked' if elt.active_checks_enabled else ''}} 
+                                          data-type="action" action="toggle-active-checks" 
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.active_checks_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Passive checks enabled:</strong></td>
+                                 <td>
+                                    <input type="checkbox" class="switch" {{'checked' if elt.passive_checks_enabled else ''}} 
+                                          data-type="action" action="toggle-passive-checks"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.passive_checks_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Notifications enabled:</strong></td>
+                                 <td>
+                                    <input type="checkbox" class="switch" {{'checked' if elt.notifications_enabled else ''}} 
+                                          data-type="action" action="toggle-notifications"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.notifications_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Event handler enabled:</strong></td>
+                                 <td>
+                                    <input type="checkbox" class="switch" {{'checked' if elt.event_handler_enabled else ''}}
+                                          data-type="action" action="toggle-event-handler"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.event_handler_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                              <tr>
+                                 <td><strong>Flapping detection enabled:</strong></td>
+                                 <td>
+                                    <input type="checkbox" class="switch" {{'checked' if elt.flap_detection_enabled else ''}} 
+                                          data-type="action" action="toggle-flap-detection"
+                                          data-element="{{helper.get_uri_name(elt)}}" data-value="{{elt.flap_detection_enabled}}"
+                                          >
+                                 </td>
+                              </tr>
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            %end
+            <!-- Tab Commands end -->
+
+            <!-- Tab Comments start -->
+            <div class="tab-pane fade" id="comments">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     %if elt.comments:
+                     <table class="table table-condensed table-hover">
+                        <thead>
+                           <tr>
+                              <th>Author</th>
+                              <th>Comment</th>
+                              <th>Date</th>
+                              <th></th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                        %for c in sorted(elt.comments, key=lambda x: x.entry_time, reverse=True):
+                           <tr>
+                              <td>{{c.author}}</td>
+                              <td>{{c.comment}}</td>
+                              <td>{{helper.print_date(c.entry_time)}}</td>
+                              <td>
+                                 <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                                       data-type="action" action="delete-comment"
+                                       data-toggle="tooltip" data-placement="bottom" title="Delete the comment '{{c.id}}' for this {{elt_type}}"
+                                       data-element="{{helper.get_uri_name(elt)}}" data-comment="{{c.id}}"
+                                       >
+                                    <i class="fa fa-trash-o"></i> 
+                                 </button>
+                              </td>
+                           </tr>
+                        %end
+                        </tbody>
+                     </table>
+
+                     %else:
+                     <div class="alert alert-info">
+                        <p class="font-blue">No comments available.</p>
+                     </div>
+                     %end
+                     
+                     <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                           data-type="action" action="add-comment"
+                           data-toggle="tooltip" data-placement="bottom" title="Add a comment for this {{elt_type}}"
+                           data-element="{{helper.get_uri_name(elt)}}" 
+                           >
+                        <i class="fa fa-plus"></i> Add a comment
+                     </button>
+                     %if elt.comments:
+                     <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                           data-type="action" action="delete-comments"
+                           data-toggle="tooltip" data-placement="bottom" title="Delete all the comments of this {{elt_type}}"
+                           data-element="{{helper.get_uri_name(elt)}}" 
+                           >
+                        <i class="fa fa-minus"></i> Delete all comments
+                     </button>
+                     %end
+                  </div>
+                  
+               </div>
+            </div>
+            <!-- Tab Comments end -->
+
+            <!-- Tab Downtimes start -->
+            <div class="tab-pane fade" id="downtimes">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     %if elt.downtimes:
+                     <table class="table table-condensed table-hover">
+                        <thead>
+                           <tr>
+                              <th>Author</th>
+                              <th>Reason</th>
+                              <th>Period</th>
+                              <th></th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                        %for dt in sorted(elt.downtimes, key=lambda dt: dt.entry_time, reverse=True):
+                           <tr>
+                              <td>{{dt.author}}</td>
+                              <td>{{dt.comment}}</td>
+                              <td>{{helper.print_date(dt.start_time)}} - {{helper.print_date(dt.end_time)}}</td>
+                              <td>
+                                 <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                                       data-type="action" action="delete-downtime"
+                                       data-toggle="tooltip" data-placement="bottom" title="Delete the downtime '{{dt.id}}' for this {{elt_type}}"
+                                       data-element="{{helper.get_uri_name(elt)}}" data-downtime="{{dt.id}}"
+                                       >
+                                    <i class="fa fa-trash-o"></i> 
+                                 </button>
+                              </td>
+                           </tr>
+                        %end
+                        </tbody>
+                     </table>
+                     %else:
+                     <div class="alert alert-info">
+                        <p class="font-blue">No downtimes available.</p>
+                     </div>
+                     %end
+                  
+                     <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                           data-type="action" action="schedule-downtime"
+                           data-toggle="tooltip" data-placement="bottom" title="Schedule a downtime for this {{elt_type}}"
+                           data-element="{{helper.get_uri_name(elt)}}" 
+                           >
+                        <i class="fa fa-plus"></i> Schedule a downtime
+                     </button>
+                     %if elt.downtimes:
+                     <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                           data-type="action" action="delete-downtimes"
+                           data-toggle="tooltip" data-placement="bottom" title="Delete all the downtimes of this {{elt_type}}"
+                           data-element="{{helper.get_uri_name(elt)}}" 
+                           >
+                        <i class="fa fa-minus"></i> Delete all downtimes
+                     </button>
+                     %end
+
+                  </div>
+               </div>
+            </div>
+            <!-- Tab Downtimes end -->
+
+            <!-- Tab Timeline start -->
+            <!--
+            <div class="tab-pane fade" id="timeline">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div id="inner_timeline" data-element='{{elt.get_full_name()}}'>
+                        <span class="alert alert-error">Sorry, I cannot load the timeline graph!</span>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            -->
+            <!-- Tab Timeline end -->
+
+            <!-- Tab Metrics start -->
+            %from shinken.misc.perfdata import PerfDatas
+            <div class="tab-pane fade" id="metrics">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <table class="table table-condensed">
+                        <thead>
+                           <tr>
+                              %if elt_type=='host' and elt.services:
+                              <th>Service</th>
+                              %end
+                              <th>Metric</th>
+                              <th>Value</th>
+                              <th>Warning</th>
+                              <th>Critical</th>
+                              <th>Min</th>
+                              <th>Max</th>
+                              <th>UOM</th>
+                              %if app.graphs_module.is_available():
+                              <th></th>
+                              %end
+                           </tr>
+                        </thead>
+                        <tbody style="font-size:x-small;">
+                        %if elt_type=='host' and elt.services:
+                        %for s in elt.services:
+                           %service_line = True
+                           %perfdatas = PerfDatas(s.perf_data)
+                           %if perfdatas:
+                           %for metric in sorted(perfdatas, key=lambda metric: metric.name):
+                           %if metric.name and metric.value:
+                           <tr>
+                              <td><strong>{{s.get_name() if service_line else ''}}</strong></td>
+                              %service_line = False
+                              <td><strong>{{metric.name}}</strong></td>
+                              <td>{{metric.value}}</td>
+                              <td>{{metric.warning if metric.warning else ''}}</td>
+                              <td>{{metric.critical if metric.critical else ''}}</td>
+                              <td>{{metric.min if metric.min else ''}}</td>
+                              <td>{{metric.max if metric.max else ''}}</td>
+                              <td>{{metric.uom if metric.uom else ''}}</td>
+                              
+                              %if app.graphs_module.is_available():
+                              <td>
+                                 %graphs = app.graphs_module.get_graph_uris(s, duration=12*3600)
+                                 %for graph in graphs:
+                                    %if re.findall('\\b'+metric.name+'\\b', graph['img_src']):
+                                       <a role="button" tabindex="0" data-toggle="popover" title="{{ s.get_full_name() }}" data-html="true" data-content="<img src='{{ graph['img_src'] }}' width='600px' height='200px'>" data-trigger="hover" data-placement="left">{{!helper.get_perfometer(s, metric.name)}}</a>
+                                    %end
+                                 %end
+                              </td>
+                              %end
+                           </tr>
+                           %end
+                           %end
+                           %end
+                        %end
+                        %end
+                        %if elt_type=='service':
+                           %perfdatas = PerfDatas(elt.perf_data)
+                           %if perfdatas:
+                           %for metric in sorted(perfdatas, key=lambda metric: metric.name):
+                           %if metric.name and metric.value:
+                           <tr>
+                              <td><strong>{{metric.name}}</strong></td>
+                              <td>{{metric.value}}</td>
+                              <td>{{metric.warning if metric.warning else ''}}</td>
+                              <td>{{metric.critical if metric.critical else ''}}</td>
+                              <td>{{metric.min if metric.min else ''}}</td>
+                              <td>{{metric.max if metric.max else ''}}</td>
+                              <td>{{metric.uom if metric.uom else ''}}</td>
+                              
+                              %if app.graphs_module.is_available():
+                              <td>
+                                 %# Graphs
+                                 %graphs = app.graphs_module.get_graph_uris(elt, duration=12*3600)
+                                 %for graph in graphs:
+                                    %if re.findall('\\b'+metric.name+'\\b', graph['img_src']):
+                                       <a role="button" tabindex="0" data-toggle="popover" title="{{ elt.get_full_name() }}" data-html="true" data-content="<img src='{{ graph['img_src'] }}' width='600px' height='200px'>" data-trigger="hover" data-placement="left">{{!helper.get_perfometer(elt, metric.name)}}</a>
+                                    %end
+                                 %end
+                              </td>
+                              %end
+                           </tr>
+                           %end
+                           %end
+                           %end
+                        %end
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            </div>
+            <!-- Tab Metrics end -->
+
+            <!-- Tab Graph start -->
+            %if app.graphs_module.is_available():
+            <script>
+            var html_graphes = [];
+            var current_graph = '';
+            var graphstart={{graphstart}};
+            var graphend={{graphend}};
+            </script>
+            <div class="tab-pane fade" id="graphs">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     %# Set source as '' or module ui-graphite will try to fetch templates from default 'detail'
+                     %uris = app.graphs_module.get_graph_uris(elt, graphstart, graphend)
+                     %if uris:
+                     <div class='well'>
+                        <!-- 5 standard time ranges to display ...  -->
+                        <ul id="graph_periods" class="nav nav-pills nav-justified">
+                          <li><a data-type="graph" data-period="4h" > 4 hours</a></li>
+                          <li><a data-type="graph" data-period="1d" > 1 day</a></li>
+                          <li><a data-type="graph" data-period="1w" > 1 week</a></li>
+                          <li><a data-type="graph" data-period="1m" > 1 month</a></li>
+                          <li><a data-type="graph" data-period="1y" > 1 year</a></li>
+                        </ul>
+                     </div>
+
+                     <div class='well'>
+                        <div id='real_graphs'>
+                        </div>
+                     </div>
+                     
+                     <script>
+                     $('a[href="#graphs"]').on('shown.bs.tab', function (e) {
+                        %uris = dict()
+                        %uris['4h'] = app.graphs_module.get_graph_uris(elt, duration=     4*3600)
+                        %uris['1d'] = app.graphs_module.get_graph_uris(elt, duration=    24*3600)
+                        %uris['1w'] = app.graphs_module.get_graph_uris(elt, duration=  7*24*3600)
+                        %uris['1m'] = app.graphs_module.get_graph_uris(elt, duration= 31*24*3600)
+                        %uris['1y'] = app.graphs_module.get_graph_uris(elt, duration=365*24*3600)
+
+                        // let's create the html content for each time range
+                        var element='/{{elt_type}}/{{elt.get_full_name()}}';
+                        %for period in ['4h', '1d', '1w', '1m', '1y']:
+                        
+                        html_graphes['{{period}}'] = '<p>';
+                        %for g in uris[period]:
+                        /* Feature removed because of URL encoding in graphs submodule.
+                        // Adjust image width / height parameter ... width is sized to container, and height is 1/3
+                        var img_src = "{{g['img_src']}}".replace("'","\'")
+                        img_src = img_src.replace(/(width=).*?(&)/,'$1' + $('#real_graphs').width() + '$2');
+                        img_src = img_src.replace(/(height=).*?(&)/,'$1' + ($('#real_graphs').width() / 3) + '$2');
+                        */
+                        
+                        html_graphes['{{period}}'] +=  '<img src="{{g['img_src']}}" class="jcropelt"/> <p></p>';
+                        %end
+                        html_graphes['{{period}}'] += '</p>';
+
+                        %end
+                        
+                        // Set first graph
+                        current_graph = '4h';
+                        $('a[data-type="graph"][data-period="'+current_graph+'"]').trigger('click');
+                     });
+                     </script>
+                     %else:
+                     <div class="alert alert-info">
+                         <div class="font-blue"><strong>No graphs available for this {{elt_type}}!</strong></div>
+                     </div>
+                     %end
+                  </div>
+               </div>
+            </div>
+            %end
+            <!-- Tab Graph end -->
+
+            <!-- Tab Dependency graph Start -->
+            <div class="tab-pane fade" id="depgraph">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div class="btn-group btn-group-sm pull-right">
+                        <button data-type="action" action="fullscreen-request" data-element="inner_depgraph" class="btn btn-primary"><i class="fa fa-desktop"></i> Fullscreen</button>
+                     </div>
+                     <div id="inner_depgraph" data-element='{{elt.get_full_name()}}'>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <!-- Tab Dependency graph End -->
+
+            <!-- Tab History start -->
+            %if app.logs_module.is_available():
+            <div class="tab-pane fade" id="history">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div id="inner_history" data-element='{{elt.get_full_name()}}'>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            %end
+            <!-- Tab History end -->
+
+            <!-- Tab Availability start -->
+            %if app.logs_module.is_available():
+            <div class="tab-pane fade" id="availability">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div id="inner_availability" data-element='{{elt.get_full_name()}}'>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            %end
+            <!-- Tab Availability end -->
+
+            <!-- Tab Helpdesk start -->
+            %if app.helpdesk_module.is_available():
+            <div class="tab-pane fade" id="helpdesk">
+               <div class="panel panel-default">
+                  <div class="panel-body">
+                     <div id="inner_helpdesk" data-element='{{elt.get_full_name()}}'>
+                     </div>
+                  
+                     <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm" 
+                           data-type="action" action="create-ticket"
+                           data-toggle="tooltip" data-placement="bottom" title="Create a ticket for this {{elt_type}}"
+                           data-element="{{helper.get_uri_name(elt)}}" 
+                           >
+                        <i class="fa fa-medkit"></i> Create a ticket
+                     </button>
+                  </div>
+               </div>
+            </div>
+            %end
+            <!-- Tab Helpdesk end -->
+         </div>
+      <!-- Detail info box end -->
+   </div>
 </div>
-
-%#End of the Host Exist or not case
+%#End of the element exist or not case
 %end

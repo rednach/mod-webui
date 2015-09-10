@@ -19,112 +19,130 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 
-import time
-
-from shinken.log import logger
-
 ### Will be populated by the UI with it's own value
 app = None
 
-# Get plugin's parameters from configuration file
+from shinken.log import logger
+
+import time
+import re
+import random
+
+try:
+    import json
+except ImportError:
+    # For old Python version, load
+    # simple json (it can be hard json?! It's 2 functions guy!)
+    try:
+        import simplejson as json
+    except ImportError:
+        print "Error: you need the json or simplejson module"
+        raise
+
+### Plugin's parameters
 params = {}
 
-import os,sys
-from webui.config_parser import config_parser
-plugin_name = os.path.splitext(os.path.basename(__file__))[0]
-try:
-    currentdir = os.path.dirname(os.path.realpath(__file__))
-    configuration_file = "%s/%s" % (currentdir, 'plugin.cfg')
-    logger.debug("Plugin configuration file: %s" % (configuration_file))
-    scp = config_parser('#', '=')
-    params = scp.parse_config(configuration_file)
+# Hook called by WebUI module once the plugin is loaded ...
+def load_config(app):
+    global params
 
-    params['default_Lat'] = float(params['default_Lat'])
-    params['default_Lng'] = float(params['default_Lng'])
-    params['default_zoom'] = int(params['default_zoom'])
+    logger.info("[WebUI-worldmap] loading configuration ...")
+
+    properties = {
+            'worldmap-zoom': '{"default_zoom": 16}',
+            'worldmap-lng': '{"default_lng": 5.080625}',
+            'worldmap-lat': '{"default_lat": 45.054148}',
+            'worldmap-hosts': '{"hosts_level": [1,2,3,4,5]}',
+            'worldmap-services': '{"services_level": [1,2,3,4,5]}',
+            'worldmap-layer': '{"layer": ""}',
+            }
+
+    for p, default in properties.items():
+        params.update(json.loads(app.prefs_module.get_ui_common_preference(p, default)))
+
+    logger.info("[WebUI-worldmap] configuration loaded.")
+    logger.info("[WebUI-worldmap] configuration, params: %s", params)
+
+
+def search_hosts_with_coordinates(search, user):
+    logger.debug("[WebUI-worldmap] search parameters '%s'", search)
+    items = app.datamgr.search_hosts_and_services(search, user, get_impacts=True)
     
-    logger.debug("WebUI plugin '%s', configuration loaded." % (plugin_name))
-    logger.debug("Plugin configuration, default position: %s / %s" % (params['default_Lat'], params['default_Lng']))
-    logger.debug("Plugin configuration, default zoom level: %d" % (params['default_zoom']))
-except Exception, exp:
-    logger.warning("WebUI plugin '%s', configuration file (%s) not available: %s" % (plugin_name, configuration_file, str(exp)))
+    # We are looking for hosts with valid GPS coordinates,
+    # and we just give them to the template to print them.
+    # :COMMENT:maethor:150810: If you want default coordinates, just put them
+    # in the 'generic-host' template.
+    valid_hosts = []
+    for h in items:
+        logger.debug("[WebUI-worldmap] found host '%s'", h.get_name())
+        
+        if h.business_impact not in params['hosts_level']:
+            continue
 
+        try:
+            _lat = float(h.customs.get('_LOC_LAT', None))
+            _lng = float(h.customs.get('_LOC_LNG', None))
+            # lat/long must be between -180/180
+            if not (-180 <= _lat <= 180 and -180 <= _lng <= 180):
+                raise Exception()
+        except Exception:
+            logger.debug("[WebUI-worldmap] host '%s' has invalid GPS coordinates", h.get_name())
+            continue
+            
+        logger.debug("[WebUI-worldmap] host '%s' located on worldmap: %f - %f", h.get_name(), _lat, _lng)
+        valid_hosts.append(h)
 
-def checkauth():
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-    else:
-        return user
-
+    return valid_hosts
 
 # Our page. If the user call /worldmap
-def get_page():
-    user = checkauth()    
+def show_worldmap():
+    user = app.request.environ['USER']
 
-    # We are looking for hosts that got valid GPS coordinates,
-    # and we just give them to the template to print them.
-    valid_hosts = []
-    for h in app.datamgr.get_hosts():
-        _lat = h.customs.get('_LOC_LAT', params['default_Lat'])
-        _lng = h.customs.get('_LOC_LNG', params['default_Lng'])
-
-        try:
-            print "Host", h.get_name(), _lat, _lng
-        except:
-            pass
-        if _lat and _lng:
-            try:
-                # Maybe the customs are set, but with invalid float?
-                _lat = float(_lat)
-                _lng = float(_lng)
-            except ValueError:
-                print "Host invalid coordinates !"
-                continue
-            # Look for good range, lat/long must be between -180/180
-            if -180 <= _lat <= 180 and -180 <= _lng <= 180:
-                valid_hosts.append(h)
+    # Apply search filter if exists ...
+    search = app.request.query.get('search', "type:host")
 
     # So now we can just send the valid hosts to the template
-    return {'app': app, 'user': user, 'params': params, 'hosts' : valid_hosts}
+    return {'search_string': search, 'params': params,
+            'mapId': 'hostsMap', 
+            'hosts': search_hosts_with_coordinates(search, user)}
 
 
-def worldmap_widget():
-    user = checkauth()    
+def show_worldmap_widget():
+    user = app.request.environ['USER']
 
-    wid = app.request.GET.get('wid', 'widget_system_' + str(int(time.time())))
+    wid = app.request.GET.get('wid', 'widget_worldmap_' + str(int(time.time())))
     collapsed = (app.request.GET.get('collapsed', 'False') == 'True')
 
-    options = {}
+    # We want to limit the number of elements, The user will be able to increase it
+    nb_elements = max(0, int(app.request.GET.get('nb_elements', '10')))
+    refine_search = app.request.GET.get('search', '')
+    
+    # Apply search filter if exists ...
+    search = app.request.query.get('search', "type:host")
 
-    # We are looking for hosts that got valid GPS coordinates,
-    # and we just give them to the template to print them.
-    valid_hosts = []
-    for h in app.datamgr.get_hosts():
-        _lat = h.customs.get('_LOC_LAT', params['default_Lat'])
-        _lng = h.customs.get('_LOC_LNG', params['default_Lng'])
+    items = search_hosts_with_coordinates(search, user)
+    
+    # Ok, if needed, apply the widget refine search filter
+    if refine_search:
+        pat = re.compile(refine_search, re.IGNORECASE)
+        items = [ i for i in items if pat.search(i.get_full_name()) ]
 
-        try:
-            print "Host", h.get_name(), _lat, _lng
-        except:
-            pass
-        if _lat and _lng:
-            try:
-                # Maybe the customs are set, but with invalid float?
-                _lat = float(_lat)
-                _lng = float(_lng)
-            except ValueError:
-                print "Host invalid coordinates !"
-                continue
-            # Look for good range, lat/long must be between -180/180
-            if -180 <= _lat <= 180 and -180 <= _lng <= 180:
-                valid_hosts.append(h)
-                
-    return {'app': app, 'user': user, 'wid': wid,
+    items = items[:nb_elements]
+
+    options = {'search': {'value': refine_search, 'type': 'text', 'label': 'Filter by name'},
+               'nb_elements': {'value': nb_elements, 'type': 'int', 'label': 'Max number of elements to show'},
+               }
+
+    title = 'Worldmap'
+    if refine_search:
+        title = 'Worldmap (%s)' % refine_search
+
+    mapId = "map_%d" % random.randint(1, 9999)
+
+    return {'wid': wid, 'mapId': mapId, 
             'collapsed': collapsed, 'options': options,
-            'base_url': '/widget/worldmap', 'title': 'Worldmap',
-            'params': params, 'hosts' : valid_hosts
+            'base_url': '/widget/worldmap', 'title': title,
+            'params': params, 'hosts' : items
             }
 
 
@@ -133,6 +151,7 @@ Show a map of all monitored hosts.
 '''
 
 # We export our properties to the webui
-pages = {get_page: {'routes': ['/worldmap'], 'view': 'worldmap', 'static': True}, 
-         worldmap_widget: {'routes': ['/widget/worldmap'], 'view': 'worldmap_widget', 'static': True, 'widget': ['dashboard'], 'widget_desc': widget_desc, 'widget_name': 'worldmap', 'widget_picture': '/static/worldmap/img/widget_worldmap.png'},
+pages = {
+    show_worldmap: {'routes': ['/worldmap'], 'view': 'worldmap', 'static': True},
+    show_worldmap_widget: {'routes': ['/widget/worldmap'], 'view': 'worldmap_widget', 'static': True, 'widget': ['dashboard'], 'widget_desc': widget_desc, 'widget_name': 'worldmap', 'widget_picture': '/static/worldmap/img/widget_worldmap.png'},
 }

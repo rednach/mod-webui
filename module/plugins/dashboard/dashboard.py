@@ -7,6 +7,7 @@
 #    Gerhard Lausser, Gerhard.Lausser@consol.de
 #    Gregory Starck, g.starck@gmail.com
 #    Hartmut Goebel, h.goebel@goebel-consult.de
+#    Frederic Mohier, frederic.mohier@gmail.com
 #
 # This file is part of Shinken.
 #
@@ -23,6 +24,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 
+from shinken.log import logger
+
 try:
     import json
 except ImportError:
@@ -31,7 +34,7 @@ except ImportError:
     try:
         import simplejson as json
     except ImportError:
-        print "Error: you need the json or simplejson module"
+        logger.error("[WebUI-dashboard] Error: you need the json or simplejson module")
         raise
 
 ### Will be populated by the UI with it's own value
@@ -40,21 +43,15 @@ app = None
 
 # Our page
 def get_page():
-    user = app.get_user_auth()
-    if not user:
-        app.bottle.redirect("/user/login")
-
-    has_user_pref_mod = app.has_user_preference_module()
+    user = app.request.environ['USER']
 
     # Look for the widgets as the json entry
-    s = app.get_user_preference(user, 'widgets')
-    print "Loaded widgets", s, type(s)
+    s = app.prefs_module.get_ui_user_preference(user, 'widgets')
     # If void, create an empty one
     if not s:
-        app.set_user_preference(user, 'widgets', '[]')
+        app.prefs_module.set_ui_user_preference(user, 'widgets', '[]')
         s = '[]'
     widget_names = json.loads(s)
-    print "And now objects", widget_names
     widgets = []
 
     for w in widget_names:
@@ -67,33 +64,22 @@ def get_page():
             # Not a dashboard widget? I don't want it so
             continue
 
-        i = w['id']
         pos = w['position']
         options = w.get('options', {})
         collapsed = w.get('collapsed', '0')
 
-        ## Try to get the options for this widget
-        #option_s = app.get_user_preference(user, 'widget_widget_system_1333371012', default='{}')
-        #print "And load options_s", option_s
-        #if option_s:
-        #    json.loads(option_s)
-        #print "And dump options for this widget", options
         w['options'] = json.dumps(options)
-        args = {'wid': i, 'collapsed': collapsed}
+        args = {'wid': w['id'], 'collapsed': collapsed}
         args.update(options)
         w['options_uri'] = '&'.join('%s=%s' % (k, v) for (k, v) in args.iteritems())
         widgets.append(w)
 
-    return {'app': app, 'user': user, 'widgets': widgets, 'has_user_pref_mod' : has_user_pref_mod}
+    return {'widgets': widgets}
 
 def get_currently():
-    # Allow anonymous access
-    user = app.get_user_auth(True)
-    if not user:
-        app.bottle.redirect("/user/login?error=No anonymous login allowed.")
+    return {}
 
-    return {'app': app, 'user': user}
-
-pages = {get_page: {'routes': ['/dashboard'], 'view': 'dashboard', 'static': True},
-         get_currently: { 'routes': ['/dashboard/currently'], 'view': 'currently', 'static': True},
-         }
+pages = {
+    get_page: {'routes': ['/dashboard'], 'view': 'dashboard', 'static': True},
+    get_currently: { 'routes': ['/dashboard/currently'], 'view': 'currently', 'static': True},
+    }

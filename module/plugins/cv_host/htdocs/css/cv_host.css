@@ -1,0 +1,137 @@
+[view="cv_host"]{
+}
+
+/* 
+ * Host layout
+ */
+[view="cv_host"] [name="host_layout"] {
+   margin-bottom: -100px;
+}
+
+/* 
+ * Services layout
+ */
+[view="cv_host"] [name="services_layout"] {
+   margin-top: 100px;
+}
+
+
+/* 
+ * Left and right metrics
+ */
+[view="cv_host"] [name="right_metrics"] {
+}
+[view="cv_host"] [name="left_metrics"] {
+}
+
+/* 
+ * Host container 
+ */
+[view="cv_host"] [name="host_container"] {
+   margin-bottom: -200px;
+}
+
+[view="cv_host"] [name="host_container"] img {
+   position: relative; top: -150px; left: 50px;
+   width: 96px;
+}
+[view="cv_host"] [name="host_container"] .hostname {
+   position: relative; top: -150px; left: 5px;
+   font-weight: bold;
+   color: #222222;
+}
+
+
+/* 
+ * CPU container 
+ */
+[view="cv_host"] [name="cpu_container"] {
+}
+
+[view="cv_host"] [name="cpu_container"] div.donut {
+   margin-right: 10px;
+   margin-bottom: -40px;
+   width: 100px; 
+   float: left;
+}
+[view="cv_host"] [name="cpu_container"] div.graph {
+
+}
+[view="cv_host"] [name="cpu_container"] div.name {
+   position: relative; top: -60px; 
+   font-weight: bold;
+   color: #000000;
+   text-align: center;
+}
+[view="cv_host"] [name="cpu_container"] div.value {
+   position: relative; top: -60px; 
+   font-weight: bold;
+   color: #000000;
+   text-align: center;
+}
+
+
+/* 
+ * Load container 
+ */
+[view="cv_host"] [name="load_container"] {
+}
+
+[view="cv_host"] [name="load_container"] div.donut {
+   margin-right: 10px;
+   margin-bottom: -40px;
+   width: 100px; 
+   float: left;
+}
+[view="cv_host"] [name="load_container"] div.graph {
+
+}
+[view="cv_host"] [name="load_container"] div.name {
+   position: relative; top: -60px; 
+   font-weight: bold;
+   color: #000000;
+   text-align: center;
+}
+[view="cv_host"] [name="load_container"] div.value {
+   position: relative; top: -60px; 
+   font-weight: bold;
+   color: #000000;
+   text-align: center;
+}
+
+
+/*
+ * Memory container 
+ */
+[view="cv_host"] [name="memory_container"] {
+}
+[view="cv_host"] [name="memory_container"] div.barchart {
+   min-height: 200px;
+}
+
+/*
+ * Disks container 
+ */
+[view="cv_host"] [name="disks_container"] {
+}
+[view="cv_host"] [name="disks_container"] div.barchart {
+   min-height: 200px;
+}
+
+
+/*
+ * Network container 
+ */
+[view="cv_host"] [name="network_container"] {
+}
+[view="cv_host"] [name="network_container"] div.barchart {
+   min-height: 200px;
+}
+
+
+
+/*
+ * Services container 
+ */
+[view="cv_host"] [name="services_container"] {
+}

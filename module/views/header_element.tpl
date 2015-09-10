@@ -1,63 +1,289 @@
-%if 'app' not in locals(): app = None
+%setdefault('app', None)
+%setdefault('user', None)
 
-<!-- Fixed navbar -->
-<div class="navbar navbar-inverse navbar-fixed-top">
-  <div class="container" style="margin-left:0; padding-left: 0; padding-right: 0; max-width: 100%;">
-    <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="nav-collapse">
-      <span class="icon-bar"></span>
-      <span class="icon-bar"></span>
-      <span class="icon-bar"></span>
-    </button>
+%username = 'anonymous'
+%if user is not None:
+%if hasattr(user, 'alias') and user.alias != 'none':
+%username = user.alias
+%else:
+%username = user.get_name()
+%end
+%end
 
-    <div>
 
-      <ul class="nav navbar-nav">
-        %menu = [ ('/dashboard', 'Dashboard'), ('/impacts','Impacts'), ('/problems','IT problems'), ('/all', 'All'), ('/wall', 'Wall')]
-        %for (key, value) in menu:
-        %# Check for the selected element, if there is one
-        %if menu_part == key:
-        <li class="active"><a href="{{key}}">{{value}}</a></li>
-        %else:
-        <li><a href="{{key}}">{{value}}</a></li>
-        %end
-        %end
-      </ul>
-      <ul class="nav navbar-nav pull-right">
-        <script>  
-          $(function ()  
-            { $("#searchhelp").popover({trigger: 'click', placement:'bottom', html: 'true', animation: 'true'});  
-          });  
-        </script> 
+<!-- Header Navbar -->
+<nav class="header navbar navbar-default navbar-static-top" style="margin-bottom:0px;">
+   <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+         <span class="sr-only">Toggle navigation</span>
+         <span class="icon-bar"></span>
+         <span class="icon-bar"></span>
+         <span class="icon-bar"></span>
+      </button>
+      <a onclick="display_modal('/modal/about')" class="logo navbar-brand">
+         <img src="/static/logo/{{app.company_logo}}" alt="Company logo" />
+      </a>
+   </div>
 
-        <li class="divider-vertical"></li>
-        %# Check for the selected element, if there is one
-        %if menu_part == '/dashboard':
-        <li><a class="quickinfo" data-original-title='Currently' href="/dashboard/currently"><i class="nav-icon icon-fullscreen"></i></a></li>
-        %else:
-        <li></li>
-        %end
+   <ul class="nav navbar-nav">
+      <!-- Page filtering ... -->
+      %include("_filters.tpl")
+   </ul>
 
+   <!-- Right part ... -->
+   %synthesis = helper.get_synthesis(app.datamgr.search_hosts_and_services("", user))
+   %s = synthesis['services']
+   %h = synthesis['hosts']
+   <div id="hosts-states-popover-content" class="hidden">
+      <table class="table table-invisible table-condensed">
+         <tbody>
+            <tr>
+               %for state in "up", "unreachable", "down", "pending", "unknown", "ack", "downtime":
+               <td>
+                 %label = "%s <i>(%s%%)</i>" % (h["nb_" + state], h["pct_" + state])
+                 {{!helper.get_fa_icon_state_and_label(cls="host", state=state, label=label, disabled=(not h["nb_" + state]))}}
+               </td>
+               %end
+            </tr>
+         </tbody>
+      </table>
+   </div>
+   <div id="services-states-popover-content" class="hidden">
+      <table class="table table-invisible table-condensed">
+         <tbody>
+            <tr>
+               %for state in "ok", "warning", "critical", "pending", "unknown", "ack", "downtime":
+               <td>
+                 %label = "%s <i>(%s%%)</i>" % (s["nb_" + state], s["pct_" + state])
+                 {{!helper.get_fa_icon_state_and_label(cls="service", state=state, label=label, disabled=(not s["nb_" + state]))}}
+               </td>
+               %end
+            </tr>
+         </tbody>
+      </table>
+   </div>
+
+   <ul class="nav navbar-top-links navbar-right">
+      <!-- Do not remove the next comment!
+         Everything between 'begin-hosts-states' comment and 'end-hosts-states' comment 
+         may be used by the layout page refresh.
+      -->
+      <!--begin-hosts-states-->
+      <li id="overall-hosts-states">
+         %state = app.datamgr.get_percentage_hosts_state(user, False)
+         %label = 'danger' if state <= app.hosts_states_warning else 'warning' if state <= app.hosts_states_critical else 'success'
+         <a id="hosts-states-popover" href="/all?search=type:host" data-original-title="Hosts states" data-toggle="popover" title="Overall hosts states, {{h['nb_elts']}} hosts, {{h["nb_down"]+h["nb_unreachable"]}} problems" data-html="true" data-trigger="hover">
+            <i class="fa fa-server"></i>
+            <span class="label label-as-badge label-{{label}}">{{ len(app.datamgr.get_problems(user=user, type='host')) }}</span>
+         </a>
+      </li>
+      <!--end-hosts-states-->
+   
+      <!-- Do not remove the next comment!
+         Everything between 'begin-services-states' comment and 'end-services-states' comment 
+         may be used by the layout page refresh.
+      -->
+      <!--begin-services-states-->
+      <li id="overall-services-states">
+         %state = app.datamgr.get_percentage_service_state(user, False)
+         %label = 'danger' if state <= app.services_states_warning else 'warning' if state <= app.services_states_critical else 'success'
+         <a id="services-states-popover" href="/all?search=type:service" data-original-title="Services states" data-toggle="popover popover-services" title="Overall services states, {{s['nb_elts']}} services, {{s["nb_critical"]+s["nb_warning"]}} problems" data-html="true" data-trigger="hover">
+            <i class="fa fa-bars"></i>
+            <span class="label label-as-badge label-{{label}}">{{ len(app.datamgr.get_problems(user=user, type='service')) }}</span>
+         </a>
+      </li>
+      <!--end-services-states-->
+    
+      <li>
+         <a class="quickinfo" data-original-title='Currently' href="/dashboard/currently" title="Dashboard currently">
+            <i class="fa fa-eye"></i>
+         </a>
+      </li>
+
+      %if refresh:
+      <li>
+         <a class="quickinfo" action="toggle-page-refresh" data-original-title='Refreshing' href="#">
+            <i id="header_loading" class="fa fa-refresh"></i>
+         </a>
+      </li>
+      %end
+   
+      %if app.play_sound:
+      <li>
+         <a class="quickinfo" action="toggle-sound-alert" data-original-title='Sound alerting' href="#">
+            <span id="sound_alerting" class="fa-stack">
+              <i class="fa fa-music fa-stack-1x"></i>
+              <i class="fa fa-ban fa-stack-2x text-danger"></i>
+            </span>
+         </a>
+      </li>
+      %end
+   
+      <!-- User info -->
+      <li class="dropdown user user-menu">
+         <a href="#" class="dropdown-toggle" data-original-title='User menu' data-toggle="dropdown">
+            <i class="fa fa-user"></i>
+            <span><span class="username hidden-sm hidden-xs hidden-md">{{username}}</span> <i class="caret"></i></span>
+         </a>
+
+         <ul class="dropdown-menu">
+            <li class="user-header">
+               <div class="panel panel-info" id="user_info">
+                  <div class="panel-body panel-default">
+                     <!-- User image / name -->
+                     <p class="username">{{username}}</p>
+                     %if app.can_action():
+                     <p class="usercategory">
+                        <small>{{'Administrator' if user.is_admin else 'User'}}</small>
+                     </p>
+                     %end
+                     <img src="{{app.user_picture}}" class="img-circle user-logo" alt="{{username}}" title="Photo: {{username}}">
+                  </div>
+                  <div class="panel-footer">
+                     <!-- User actions -->
+                     <div class="btn-group" role="group">
+                        <a href="https://github.com/shinken-monitoring/mod-webui/wiki" target="_blank" class="btn btn-default btn-flat"><i class="fa fa-book"></i> </a>
+                     </div>
+                     <div class="btn-group" role="group">
+                        <a href="#actions" data-toggle="modal" class="btn btn-default btn-flat disabled"><span class="fa fa-gear"></span> </a>
+                        <a href="/user/pref" data-toggle="modal" class="btn btn-default btn-flat"><span class="fa fa-pencil"></span> </a>
+                     </div>
+                     <div class="btn-group" role="group">
+                        <a href="/user/logout" class="btn btn-default btn-flat" data-toggle="modal" data-target="/user/logout"><span class="fa fa-sign-out"></span> </a>
+                     </div>
+                  </div>
+               </div>
+            </li>
+         </ul>
+      </li>
+   </ul>
+
+
+  <!--SIDEBAR-->
+  <div class="navbar-default sidebar" role="navigation">
+    <div class="sidebar-nav navbar-collapse">
+      <ul class="nav" id="sidebar-menu">
         %if app:
-        %overall_itproblem = app.datamgr.get_overall_it_state()
-        %if overall_itproblem == 0:
-        <li><a href="/problems" class="quickinfo" data-original-title='IT Problems'><i class="icon-ambulance"></i><span class="pulsate badger badger-ok">OK!</span> </a></li>
-        %elif overall_itproblem == 1:
-        <li><a href="/problems" class="quickinfo" data-original-title='IT Problems'><i class="icon-ambulance"></i><span class="pulsate badger badger-warning">{{app.datamgr.get_nb_all_problems(app.get_user_auth())}}</span> </a></li>
-        %elif overall_itproblem == 2:
-        <li><a href="/problems" class="quickinfo" data-original-title='IT Problems'><i class="icon-ambulance"></i><span class="pulsate badger badger-critical">{{app.datamgr.get_nb_all_problems(app.get_user_auth())}}</span> </a></li>
+        <li> <a href="/dashboard"> <span class="fa fa-dashboard"></span> Dashboard </a> </li>
+        <li> <a href="/problems"> <span class="fa fa-ambulance"></span> Problems </a> </li>
+        <li> <a href="#"><i class="fa fa-sitemap"></i> Groups and tags <i class="fa arrow"></i></a>
+          <ul class="nav nav-second-level">
+            <li> <a href="/hosts-groups"> <span class="fa fa-sitemap"></span> Hosts groups </a> </li>
+            <li> <a href="/services-groups"> <span class="fa fa-sitemap"></span> Services groups </a> </li>
+            <li> <a href="/hosts-tags"> <span class="fa fa-tags"></span> Hosts tags </a> </li>
+            <li> <a href="/services-tags"> <span class="fa fa-tags"></span> Services tags </a> </li>
+            <li> <a href="/contacts-groups"> <span class="fa fa-users"></span> Contacts groups </a> </li>
+          </ul>
+        </li>
+        <li> <a href="#"><i class="fa fa-bar-chart"></i> Tactical views <i class="fa arrow"></i></a>
+          <ul class="nav nav-second-level">
+            <li> <a href="/impacts"> <span class="fa fa-bolt"></span> Impacts </a> </li>
+            <li> <a href="/minemap"> <span class="fa fa-table"></span> Minemap </a> </li>
+            <li> <a href="/worldmap"> <span class="fa fa-globe"></span> World map </a> </li>
+            <li> <a href="/wall"> <span class="fa fa-th-large"></span> Wall </a> </li>
+            %if app.logs_module.is_available():
+            <li> <a href="/availability"> <span class="fa fa-bar-chart"></span> Availability </a> </li>
+            %end
+          </ul>
+        </li>
+        %if user.is_admin:
+        <li> <a href="#"><i class="fa fa-gears"></i> System <i class="fa arrow"></i></a>
+          <ul class="nav nav-second-level">
+            <li> <a href="/system"> <span class="fa fa-heartbeat"></span> Status </a> </li>
+            %if app.logs_module.is_available():
+            <li> <a href="/logs"> <span class="fa fa-th-list"></span> Logs </a> </li>
+            %end
+          </ul>
+        </li>
+        <li> <a href="#"><i class="fa fa-wrench"></i> Configuration <i class="fa arrow"></i></a>
+          <ul class="nav nav-second-level">
+            <li> <a href="/parameters"> <span class="fa fa-gears"></span> Parameters </a> </li>
+            <li> <a href="/contacts"> <span class="fa fa-users"></span> Contacts </a> </li>
+            <li> <a href="/commands"> <span class="fa fa-terminal"></span> Commands </a> </li>
+            <li> <a href="/timeperiods"> <span class="fa fa-calendar"></span> Time periods </a> </li>
+          </ul>
+        </li>
+        %end
+        %other_uis = app.get_ui_external_links()
+        %if len(other_uis) > 0:
+        <li> <a href="#"><i class="fa fa-rocket"></i> External <i class="fa arrow"></i></a>
+          <ul class="nav nav-second-level">
+            %for c in other_uis:
+            <li>
+              <a href="{{c['uri']}}" target="_blank"><span class="fa fa-rocket"></span> {{c['label']}}</a>
+            </li>
+            %end
+          </ul>
+        </li>
         %end
         %end
 
-        %if app:
-        %overall_state = app.datamgr.get_overall_state()
-        %if overall_state == 2:
-        <li><a href="/impacts" class="quickinfo" data-original-title='Impacts'><i class="icon-impact"></i><span class="pulsate badger badger-critical">{{app.datamgr.get_len_overall_state()}}</span> </a></li>
-        %elif overall_state == 1:
-        <li><a href="/impacts" class="quickinfo" data-original-title='Impacts'><i class="icon-impact"></i><span class="pulsate badger badger-warning">{{app.datamgr.get_len_overall_state()}}</span> </a></li>
-        %end
-        %end
-        
       </ul>
-    </div><!--/.nav-collapse -->
+    </div>
+    <!-- /.sidebar-collapse -->
   </div>
-</div>
+  <!-- /.navbar-static-side -->
+</nav>
+
+%how_many_problems_actually = len(app.datamgr.get_all_problems())
+%if app.play_sound:
+<audio id="alert-sound" volume="1.0">
+   <source src="/static/sound/alert.wav" type="audio/wav">
+   Your browser does not support the <code>HTML5 Audio</code> element.
+   <EMBED src="/static/sound/alert.wav" autostart=true loop=false volume=100 >
+</audio>
+
+<script type="text/javascript">
+   // Set alerting sound icon ...
+   if (! sessionStorage.getItem("sound_play")) {
+      // Default is to play ...
+      sessionStorage.setItem("sound_play", {{'1' if app.play_sound else '0'}});
+   }
+   if (! sessionStorage.getItem("how_many_problems_actually")) {
+      // Default is current value ...
+      sessionStorage.setItem("how_many_problems_actually", {{how_many_problems_actually}});
+   }
+   
+   if (sessionStorage.getItem("sound_play") == '1') {
+      $('#sound_alerting i.fa-ban').addClass('hidden');
+      if (Number(sessionStorage.getItem("how_many_problems_actually")) < {{how_many_problems_actually}}) {
+         playAlertSound();
+      }
+   } else {
+      $('#sound_alerting i.fa-ban').removeClass('hidden');
+   }
+   sessionStorage.setItem("how_many_problems_actually", {{how_many_problems_actually}});
+
+   // Toggle sound ...
+   $('[action="toggle-sound-alert"]').on('click', function (e, data) {
+      if (sessionStorage.getItem("sound_play") == '1') {
+         sessionStorage.setItem("sound_play", "0");
+         $('#sound_alerting i.fa-ban').removeClass('hidden');
+      } else {
+         playAlertSound();
+      }
+   });
+</script>
+%end
+
+<script type="text/javascript">
+   // Activate the popover ...
+   $('#hosts-states-popover').popover({ 
+      placement: 'bottom', 
+      animation: true, 
+      template: '<div class="popover img-popover"><div class="arrow"></div><div class="popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
+      content: function() {
+         return $('#hosts-states-popover-content').html();
+      }
+   });
+
+   // Activate the popover ...
+   $('#services-states-popover').popover({ 
+      placement: 'bottom', 
+      animation: true, 
+      template: '<div class="popover img-popover"><div class="arrow"></div><div class="popover-inner"><h3 class="popover-title"></h3><div class="popover-content"><p></p></div></div></div>',
+      content: function() {
+         return $('#services-states-popover-content').html();
+      }
+   });
+</script>

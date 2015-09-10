@@ -24,78 +24,72 @@
 # along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 
 import time
+import random
 
 ### Will be populated by the UI with it's own value
 app = None
 
+# :TODO:maethor:150821: These function needs huge rewrite.
 
 def depgraph_host(name):
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
-
-    if not user:
-        return {'app': app, 'elt': None, 'valid_user': False}
-
     # Ok we are in a detail page but the user ask for a specific search
-    search = app.request.GET.get('global_search', None)
+    search = app.request.GET.get('global_search', '')
     loop = bool(int(app.request.GET.get('loop', '0')))
     loop_time = int(app.request.GET.get('loop_time', '10'))
+
+    user = app.request.environ['USER']
     
     if search:
-        new_h = app.datamgr.get_host(search)
+        new_h = app.datamgr.get_host(search, user)
         if new_h:
             app.bottle.redirect("/depgraph/" + search)
 
-    h = app.datamgr.get_host(name)
-    return {'app': app, 'elt': h, 'user': user, 'valid_user': True, 'loop' : loop, 'loop_time' : loop_time}
-
-
-def depgraph_srv(hname, desc):
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
-
-    if not user:
-        return {'app': app, 'elt': None, 'valid_user': False}
-
-    loop = bool(int(app.request.GET.get('loop', '0')))
-    loop_time = int(app.request.GET.get('loop_time', '10'))
-
-    # Ok we are in a detail page but the user ask for a specific search
-    search = app.request.GET.get('global_search', None)
-    if search:
-        new_h = app.datamgr.get_host(search)
-        if new_h:
-            app.bottle.redirect("/depgraph/" + search)
-
-    s = app.datamgr.get_service(hname, desc)
-    return {'app': app, 'elt': s, 'user': user, 'valid_user': True, 'loop' : loop, 'loop_time' : loop_time}
-
-
-def get_depgraph_widget():
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
-
-    if not user:
-        return {'app': app, 'elt': None, 'valid_user': False}
-
-    search = app.request.GET.get('search', '').strip()
-
-    if not search:
+    else:
         # Ok look for the first host we can find
-        hosts = app.datamgr.get_hosts()
+        hosts = app.datamgr.get_hosts(user)
         for h in hosts:
             search = h.get_name()
             break
 
+    h = app.datamgr.get_host(name, user) or app.redirect404()
+    
+    graphId = "graph_%d" % random.randint(1, 9999)
 
-    elts = search.split('/', 1)
-    if len(elts) == 1:
-        s = app.datamgr.get_host(search)
-    else:  # ok we got a service! :)
-        s = app.datamgr.get_service(elts[0], elts[1])
+    return {'elt': h, 'graphId': graphId, 'loop' : loop, 'loop_time' : loop_time}
+
+
+def depgraph_service(hname, desc):
+    loop = bool(int(app.request.GET.get('loop', '0')))
+    loop_time = int(app.request.GET.get('loop_time', '10'))
+
+    user = app.request.environ['USER']
+
+    # Ok we are in a detail page but the user ask for a specific search
+    search = app.request.GET.get('global_search', None)
+    if search:
+        new_h = app.datamgr.get_host(search, user)
+        if new_h:
+            app.bottle.redirect("/depgraph/" + search)
+
+    s = app.datamgr.get_service(hname, desc, user)
+    
+    graphId = "graph_%d" % random.randint(1, 9999)
+
+    return {'elt': s, 'graphId': graphId, 'loop' : loop, 'loop_time' : loop_time}
+
+
+def get_depgraph_widget():
+    search = app.request.GET.get('search', '').strip()
+    user = app.request.environ['USER']
+
+    if not search:
+        # Ok look for the first host we can find
+        hosts = app.datamgr.get_hosts(user)
+        for h in hosts:
+            search = h.get_name()
+            break
+
+    elt = app.datamgr.get_element(search, user) or app.redirect404() 
 
     wid = app.request.GET.get('wid', 'widget_depgraph_' + str(int(time.time())))
     collapsed = (app.request.GET.get('collapsed', 'False') == 'True')
@@ -105,34 +99,28 @@ def get_depgraph_widget():
 
     title = 'Relation graph for %s' % search
 
-    return {'app': app, 'elt': s, 'user': user,
+    graphId = "graph_%d" % random.randint(1, 9999)
+
+    return {'elt': elt, 'graphId': graphId, 
             'wid': wid, 'collapsed': collapsed, 'options': options, 'base_url': '/widget/depgraph', 'title': title,
             }
 
 
 def get_depgraph_inner(name):
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
+    user = app.request.environ['USER']
+    elt = app.datamgr.get_element(name, user) or app.redirect404()
+    
+    graphId = "graph_%d" % random.randint(1, 9999)
 
-    if not user:
-        return {'app': app, 'elt': None, 'user': None}
-
-    elt = None
-    if '/' in name:
-        elts = name.split('/', 1)
-        elt = app.datamgr.get_service(elts[0], elts[1])
-    else:
-        elt = app.datamgr.get_host(name)
-
-    return {'app': app, 'elt': elt, 'user': user}
+    return {'elt': elt, 'graphId': graphId}
 
 widget_desc = '''<h4>Relation graph</h4>
 Show a graph of an object relations
 '''
 
-pages = {depgraph_host: {'routes': ['/depgraph/:name'], 'view': 'depgraph', 'static': True},
-         depgraph_srv: {'routes': ['/depgraph/:hname/:desc'], 'view': 'depgraph', 'static': True},
-         get_depgraph_widget: {'routes': ['/widget/depgraph'], 'view': 'widget_depgraph', 'static': True, 'widget': ['dashboard'], 'widget_desc': widget_desc, 'widget_name': 'depgraph', 'widget_picture': '/static/depgraph/img/widget_depgraph.png'},
-         get_depgraph_inner: {'routes': ['/inner/depgraph/:name#.+#'], 'view': 'inner_depgraph', 'static': True},
-         }
+pages = {
+    depgraph_host:          {'routes': ['/depgraph/:name'], 'view': 'depgraph', 'static': True},
+    depgraph_service:       {'routes': ['/depgraph/:hname/:desc'], 'view': 'depgraph', 'static': True},
+    get_depgraph_widget:    {'routes': ['/widget/depgraph'], 'view': 'widget_depgraph', 'static': True, 'widget': ['dashboard'], 'widget_desc': widget_desc, 'widget_name': 'depgraph', 'widget_picture': '/static/depgraph/img/widget_depgraph.png'},
+    get_depgraph_inner:     {'routes': ['/inner/depgraph/:name#.+#'], 'view': 'inner_depgraph', 'static': True},
+}

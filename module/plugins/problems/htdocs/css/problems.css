@@ -1,0 +1,58 @@
+.hiddenRow {
+    padding: 0 !important;
+    border: 0 !important;
+}
+
+td, th {
+    vertical-align: middle !important;
+}
+
+.img-popover {
+   width: auto;
+   max-width: 1000px;
+}
+
+.panel > .panel-body > h3 {
+    margin-top:0;
+    margin-bottom: 10px;
+}
+
+.panel > .panel-body > table {
+    margin-bottom:0;
+}
+
+td .progress {
+    margin-bottom:0px !important;
+}
+
+td .ellipsis {
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+td .ellipsis > .long-output {
+    display:none;
+}
+
+/*
+ * Problems table, responsive table columns
+ */
+@media (max-width: 991px) {
+    .service-column, .host-column {
+        width: 100%;
+    }
+}
+@media (min-width: 992px) {
+    .service-column, .host-column {
+        width: 60%;
+    }
+}
+@media (min-width: 1200px) {
+    .service-column, .host-column {
+        width: 40%;
+    }
+}
+@media (min-width: 1400px) {
+    .service-column, .host-column {
+        width: 30%;
+    }
+}

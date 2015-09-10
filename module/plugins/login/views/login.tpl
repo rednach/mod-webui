@@ -1,77 +1,85 @@
-%rebase layout title='Shinken UI Login', print_header=False, print_nav=False, js=['login/js/detectmobilebrowser.js','login/js/capslock.js'], css=['login/css/login.css']
+<!DOCTYPE html>
 
 %from shinken.bin import VERSION
 
-<script type="text/javascript">
-// If we are a mobile device, go in the /mobile part :)
-$(document).ready(function(){
-  // jQuery.browser.mobile is filled by login/js/detectmobilebrowser.js
-  if($.browser.mobile){
-    window.location = '/mobile/';
-  }
-});
-</script>
+<html lang="en">
+   <head>
+      <meta charset="utf-8">
+      <title>Shinken WebUI Login page</title>
 
-<div class="page-header">
-	<h1>Shinken <small>v {{VERSION}}</small></h1>
-</div>
+      <!-- 
+         This file is a part of Shinken.
 
-<div class="row">
-	<div class="col-xs-6 col-sm-8 col-md-8">
-		<noscript>
-			<div class="row alert">
-				<button type="button" class="close" data-dismiss="alert">×</button>
-				<div class="font-red"><strong>Warning!</strong> Please enable Java Script in your browser and retry.</div>
-			</div>
-		</noscript>
+         Shinken is free software: you can redistribute it and/or modify it under the terms of the
+         GNU Affero General Public License as published by the Free Software Foundation, either
+         version 3 of the License, or (at your option) any later version.
 
+         WebUI Version: {{app.app_version}}
+         Shinken Framework Version: {{VERSION}}
+      -->
 
-		%if login_text:
-		<p class="lead">{{login_text}}</p>
-		%end
+      <!-- Stylesheets 
+      ================================================== -->
+      <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+      <link href="/static/css/bootstrap-theme.min.css" rel="stylesheet">
+      <link href="/static/css/font-awesome.min.css" rel="stylesheet">
+      <link href="/static/css/shinken-layout.css" rel="stylesheet">
 
-		<img src="/static/img/logo.png" />
-		<!-- <img src="/static/img/mascot.png" /> -->
-		%if error:
-		<div class="alert alert-error">
-			<strong>Warning!</strong>
-			{{error}}
-		</div>
-		%end
+      <!-- Scripts
+      ================================================== -->
+      <script src="/static/js/jquery-1.11.1.min.js"></script>
+      <script src="/static/js/bootstrap.min.js"></script>
+   </head>
 
-		<!-- <div>
-		<h2>Maintance News</h2>
-		<p>Todo import script?</p>
-		</div> -->
-	</div>
-
-	<div class="col-xs-6 col-sm-4 col-md-4">
-		<div class="panel panel-default">
-			<div class="panel-heading">
-				<h4 class="panel-title">Login</h4>
-			</div>
-			<div class="panel-body">
-				<form method="post" id="loginform" role="form" action="/user/auth">
-					<fieldset>
-						<div class="form-group">
-							<label>Name</label>
-							<div>
-								<input class="form-control" name="login" type="text">
-							</div>
-						</div>
-						<div class="form-group">
-							<label>Password</label>
-							<div>
-								<input id="password" class="form-control" name="password" type="password" onkeypress="capsCheck(event,this);">
-							</div>
-						</div>
-						<div class="form-group pull-right">
-							<button class=" btn btn-success" type="submit" href="javascript: submitform()"><i class="icon-signin"></i> Login</button>
-						</div>
-					</fieldset>
-				</form>
-			</div>
-		</div>
-	</div>
-</div>
-
+   <body>
+      <div class="container" style="padding-top: 100px;">
+         <div class="col-md-4 col-md-offset-4">
+            <div class="login-panel panel panel-default">
+               <div class="panel-heading">
+                  <h2>Shinken <small>version {{VERSION}}</small></h2>
+                  <center>
+                     <img src="/static/logo/{{company_logo}}" alt="Company logo" style="width: 80%"/>
+                  </center>
+               </div>
+               <div class="panel-body">
+                  <form role="form" method="post" action="/user/auth">
+                     <fieldset>
+                        <div class="form-group">
+                           <input class="form-control" placeholder="username" name="login" type="text" autofocus>
+                        </div>
+                        <div class="form-group">
+                           <input class="form-control" placeholder="Password" name="password" type="password" value="">
+                        </div>
+                        <!--
+                        <div class="checkbox">
+                           <label>
+                              <input name="remember" type="checkbox" value="Remember Me">Remember Me
+                           </label>
+                        </div>
+                        -->
+                        
+                        <button class="btn btn-lg btn-success btn-block" type="submit"><i class="fa fa-sign-in"></i> Login</button>
+                     </fieldset>
+                  </form>
+               </div>
+               <div class="panel-footer">
+                  %if error:
+                  <div class="alert alert-danger" role="alert">
+                     <strong>Warning!</strong>
+                     {{error}}
+                  </div>
+                  %end
+                  <div style="min-height: 100px;">
+                     <img src="/static/images/shinken.png" style="position: relative; top:-30px; left:-12px; width: 120px;" class="pull-left"/>
+                     %if login_text:
+                     <h3>{{login_text}}</h3>
+                     %end
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+      
+      %include("footer_element")
+   </body>
+</html>

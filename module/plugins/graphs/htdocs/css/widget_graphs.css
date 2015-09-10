@@ -1,4 +1,6 @@
-.widget_graph{
-    padding-left : 5px;
-    padding-right : 5px;
+.widget-graph{
+   padding: 1px;
+}
+.widget-graph img {
+   padding: 1px;
 }

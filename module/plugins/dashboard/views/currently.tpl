@@ -1,170 +1,356 @@
-%rebase layout globals(), js=['dashboard/js/widgets.js','dashboard/js/screenfull.js', 'dashboard/js/jquery.easywidgets.js', 'dashboard/js/jquery.jclock.js'], css=['dashboard/css/shinken-currently.css'], title='Shinken currently', print_header=False, print_footer=False, refresh=True
+%setdefault('refresh', True)
+%rebase("fullscreen", css=['dashboard/css/currently.css'], title='Shinken currently')
 
-%from shinken.bin import VERSION
 %helper = app.helper
 
 <script type="text/javascript">
-  /* We are saving the global context for theses widgets */
-  widget_context = 'dashboard';
+   $(document).ready(function(){
+      // Date / time
+      $('#clock').jclock({ format: '%H:%M:%S' });
+      $('#date').jclock({ format: '%A, %B %d' });
 
-  $(function($) {
-		var options1 = {
-			format: '%H:%M:%S ' // 24-hour
-		}
-		$('#clock').jclock(options1);
-		var options6 = {
-			format: '%A, %B %d'
-		}
-		$('#date').jclock(options6);
-	});
+      // Fullscreen management
+      if (screenfull.enabled) {
+         $('a[action="fullscreen-request"]').on('click', function() {
+            screenfull.request();
+         });
 
-	$(function() {
-		$('#supported').text('Supported/allowed: ' + !!screenfull.enabled);
+         // Fullscreen changed event
+         document.addEventListener(screenfull.raw.fullscreenchange, function () {
+            if (screenfull.isFullscreen) {
+               $('a[action="fullscreen-request"]').hide();
+            } else {
+               $('a[action="fullscreen-request"]').show();
+            }
+         });
+      }
 
-		if (!screenfull.enabled) {
-			return false;
-		}
+      // On resize ...
+      $(window).bind("load resize", function() {
+         width = (this.window.innerWidth > 0) ? this.window.innerWidth : this.screen.width;
+         height = ((this.window.innerHeight > 0) ? this.window.innerHeight : this.screen.height) - 1;
 
-		$('#request2').click(function() {
-			screenfull.request();
-		});
-
-		// Trigger the onchange() to set the initial values
-		screenfull.onchange();
-	});
+         if (height < 1) height = 1;
+         $("#page-wrapper").css("min-height", (height-5) + "px");
+      });
+   });
 </script>
 
-%user = app.get_user_auth()
+%setdefault('user', None)
 %username = 'anonymous'
-%if user is not None: username = user.get_name()
-
-%if username != 'anonymous':
-<div class="row">
-	<ul class="pull-right nav nav-pills font-grey">
-		<li> <a href="/dashboard" class="font-darkgrey"><i class="icon-home"></i></a> </li>
-	</ul>
-</div>
+%if user is not None:
+%if hasattr(user, 'alias'):
+%  username = user.alias
+%else:
+%  username = user.get_name()
+%end
 %end
 
-<!-- Jet Pack Area START -->
-<div class="row">
-	  <p><span id="clock"></span></p>
-	  <p><span id="date"></span></p>
+%if username != 'anonymous':
+<div id="back-home">
+   <ul class="nav nav-pills navbar-left">
+      <li> <a class="font-darkgrey" href="/dashboard"><i class="fa fa-home"></i></a> </li>
+      <li> <a class="font-darkgrey" href="#" action="fullscreen-request" class="font-darkgrey"><i class="fa fa-desktop"></i></a> </li>
+   </ul>
+   %if app.play_sound:
+   <ul class="nav nav-pills navbar-right">
+      <li>
+         <a class="font-darkgrey" action="toggle-sound-alert" data-original-title='Sound alerting' href="#">
+            <span id="sound_alerting" class="fa-stack">
+              <i class="fa fa-music fa-stack-1x"></i>
+              <i class="fa fa-ban fa-stack-2x text-danger"></i>
+            </span>
+         </a>
+      </li>
+   </ul>
+   %end
+</div>
+%end
+<div id="date-time">
+   <h1 id="clock"></h1>
+   <h3 id="date"></h3>
 </div>
 
-<ul id="Navigation" class="col-sm-12">
-	<li class="col-sm-3">
-    %if username != 'anonymous':
-    <a href="/problems" class="btn btn-sm"><i class="icon-plus" style="color: #333"></i>
-    %end
-		<svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="100px" height="85px" viewBox="0 0 100 83.419" enable-background="new 0 0 100 83.419" fill ="#FFFFFF" xml:space="preserve">
-			<path fill-opacity="0.875" d="M68.2,55.555l4.742,4.792c6.451-6.143,10.461-14.861,10.461-24.532c0-9.521-3.901-18.122-10.184-24.25
-			l-5.159,5.356c5.06,4.861,8.228,11.724,8.228,19.317C76.288,43.797,73.217,50.701,68.2,55.555z"></path>
-			<path fill-opacity="0.875" d="M56.625,43.85l5.856,5.923c3.591-3.371,5.857-8.176,5.857-13.535c0-5.425-2.322-10.297-5.996-13.676
-			l-5.858,6.063c2.083,1.862,3.486,4.559,3.486,7.613C59.971,39.257,58.664,41.993,56.625,43.85z"></path>
-			<path fill-opacity="0.875" d="M20.082,7.333l-5.996-6.063C5.388,10.352,0,22.63,0,36.237c0,13.575,5.286,25.895,13.945,34.967
-			l6.137-6.203C12.987,57.483,8.646,47.283,8.646,36.097C8.646,24.914,12.987,14.819,20.082,7.333z"></path>
-			<path fill-opacity="0.875" d="M78.66,66.129l6.137,6.202C94.124,63.162,100,50.43,100,36.237C100,21.979,94.071,9.186,84.658,0
-			L78.66,6.064c7.797,7.588,12.691,18.201,12.691,30.032C91.352,47.896,86.418,58.51,78.66,66.129z"></path>
-			<path fill-opacity="0.875" d="M25.661,12.972c-5.5,6.013-8.926,14.014-8.926,22.843c0,9.017,3.499,17.218,9.205,23.266l4.742-4.796
-			c-4.303-4.749-6.974-11.085-6.974-18.047c0-6.996,2.628-13.424,6.974-18.19L25.661,12.972z"></path>
-			<path fill-opacity="0.875" d="M42.258,42.583c-1.398-1.747-2.23-3.93-2.23-6.346c0-2.48,0.897-4.718,2.371-6.486l-5.858-5.779
-			c-2.938,3.268-4.882,7.514-4.882,12.265c0,4.718,1.84,9.005,4.743,12.268L42.258,42.583z"></path>
-			<path d="M45.838,36.237c0,2.324,1.865,4.208,4.16,4.208c2.298,0,4.159-1.884,4.159-4.208c0-2.321-1.861-4.204-4.159-4.204
-			C47.703,32.033,45.838,33.917,45.838,36.237z"></path>
-			<path fill-opacity="0.875" d="M45.313,46.234L34.497,83.419h30.286L53.966,46.234C51.102,46.874,48.226,47.098,45.313,46.234z"></path>
-		</svg>
-		<span class="badger-title itproblem">IT Problems</span>
-		%if app:
-			%overall_itproblem = app.datamgr.get_overall_it_state()
-			%if overall_itproblem == 0:
-			<span class=" badger-big badger-ok">OK!</span>
-			%elif overall_itproblem == 1:
-			<span class="badger-big badger-warning">{{app.datamgr.get_nb_all_problems(user)}}</span>
-			%elif overall_itproblem == 2:
-			<span class=" badger-big badger-critical">{{app.datamgr.get_nb_all_problems(user)}}</span>
-			%end
-		%end
-    %if username != 'anonymous':
-    </a>
-		%end
-	</li>
+%how_many_problems_actually = len(app.datamgr.get_all_problems())
+%if app.play_sound:
+<audio id="alert-sound" volume="1.0">
+   <source src="/static/sound/alert.wav" type="audio/wav">
+   Your browser does not support the <code>HTML5 Audio</code> element.
+   <EMBED src="/static/sound/alert.wav" autostart=true loop=false volume=100 >
+</audio>
 
-	<li class="col-sm-3">
-    %if username != 'anonymous':
-    <a href="/impacts" class="slidelink btn btn-sm"><i class="icon-plus" style="color: #333"></i>
-		%end
-		<svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="100px" height="82.922px" viewBox="0 0 100 82.922" enable-background="new 0 0 100 82.922" fill="#FFFFFF" xml:space="preserve">
-			<path d="M77.958,11.073c-3.73,0-7.339,0.933-10.544,2.685C63.515,5.537,55.108,0,45.693,0C32.842,0,22.314,10.141,21.694,22.838
-			c-5.901,0.704-10.96,4.619-13.149,10.09C3.642,34.151,0,38.595,0,43.873c0,6.223,5.062,11.283,11.281,11.283h27.821l-4.238,8.501
-			h6.463L28.781,82.922l32.948-23.357l-10.714-0.128l4.004-4.28h22.938c12.154,0,22.042-9.891,22.042-22.042
-			C100,20.961,90.112,11.073,77.958,11.073z M77.958,47.375H11.281c-1.932,0-3.502-1.571-3.502-3.502c0-1.904,1.532-3.46,3.43-3.502
-			c0.062,0.006,0.125,0.009,0.188,0.012l3.291,0.107l0.65-3.229c0.787-3.915,4.266-6.757,8.266-6.757c0.481,0,0.978,0.044,1.474,0.131
-			l5.257,0.924l-0.73-5.284c-0.104-0.766-0.157-1.521-0.157-2.249c0-8.958,7.289-16.244,16.247-16.244
-			c7.695,0,14.391,5.462,15.917,12.988l1.405,6.906l5.097-4.871c2.667-2.545,6.163-3.95,9.846-3.95c7.865,0,14.26,6.398,14.26,14.26
-			S85.823,47.375,77.958,47.375z"/>
-		</svg>
-		<span class="badger-title impacts">Impacts</span>
-		%if app:
-			%overall_state = app.datamgr.get_overall_state()
-			%if overall_state == 2:
-			<span class="badger-big badger-critical">{{app.datamgr.get_len_overall_state()}}</span>
-			%elif overall_state == 1:
-			<span class="badger-big badger-critical">{{app.datamgr.get_len_overall_state()}}</span>
-			%end
-		%end
-    %if username != 'anonymous':
-    </a>
-		%end
-	</li>
+<script type="text/javascript">
+   // Set alerting sound icon ...
+   if (! sessionStorage.getItem("sound_play")) {
+      // Default is to play ...
+      sessionStorage.setItem("sound_play", {{'1' if app.play_sound else '0'}});
+   }
 
-	<li class="col-sm-3">
-    %if username != 'anonymous':
-    <a href="/servicegroup/all" class="slidelink btn btn-sm"><i class="icon-plus" style="color: #333"></i>
-		%end
-    <svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="100px" height="82.922px" viewBox="0 0 100 82.922" enable-background="new 0 0 100 82.922" fill="#FFFFFF" xml:space="preserve">
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M17.15,47.28V85.2l31.601,13.543v-37.92L17.15,47.28z M84,45.437  L49.653,60.823v37.92L84,83.357V45.437z M61.458,2.445l-33.466,14.83v32.759l9.043,3.747l-0.022-22.753  c0,0,12.31-5.395,24.445-10.691V2.445z M22.575,15.695L22.56,47.784l4.507,1.865V17.485L22.575,15.695z M22.936,14.311l4.484,1.791  l32.759-14.28L55.665,0L22.936,14.311z M38.818,54.525l4.5,1.866V35.543l-4.492-1.791L38.818,54.525z M44.243,56.775l5.41,2.242  l28.057-12.52V20.502l-33.467,14.83V56.775z M39.188,32.368l4.484,1.791l32.76-14.28l-4.515-1.821L39.188,32.368z"/>
-    </svg>
-    <span class="badger-title services">Services OK</span>
-    %if app:
-      %service_state = app.datamgr.get_per_service_state()
-      %if service_state <= 0:
-      <span class="badger-big badger-critical">{{app.datamgr.get_per_service_state()}}%</span>
-      %elif service_state <= 33:
-      <span class="badger-big badger-critical">{{app.datamgr.get_per_service_state()}}%</span>
-      %elif service_state <= 66:
-      <span class="badger-big badger-warning">{{app.datamgr.get_per_service_state()}}%</span>
-      %elif service_state <= 100:
-      <span class="badger-big badger-ok">{{app.datamgr.get_per_service_state()}}%</span>
-      %end
-    %end
-    %if username != 'anonymous':
-    </a>
-		%end
-	</li>
+   // Toggle sound ...
+   if (sessionStorage.getItem("sound_play") == '1') {
+      $('#sound_alerting i.fa-ban').addClass('hidden');
+   } else {
+      $('#sound_alerting i.fa-ban').removeClass('hidden');
+   }
+   $('[action="toggle-sound-alert"]').on('click', function (e, data) {
+      if (sessionStorage.getItem("sound_play") == '1') {
+         sessionStorage.setItem("sound_play", "0");
+         $('#sound_alerting i.fa-ban').removeClass('hidden');
+      } else {
+         playAlertSound();
+         $('#sound_alerting i.fa-ban').addClass('hidden');
+      }
+   });
+</script>
+%end
 
-	<li class="col-sm-3">
-    %if username != 'anonymous':
-    <a href="/hostgroup/all" class="slidelink btn btn-sm"><i class="icon-plus" style="color: #333"></i>
-		%end
-		<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" width="100px" height="82.922px" viewBox="0 0 50 50" enable-background="new 0 0 50 50" fill="#FFFFFF" xml:space="preserve">
-		<polygon points="45.91,26.078 40.467,26.078 40.467,44.177 25.517,44.177 25.517,34.844 16.105,34.844 16.105,44.177 8.73,44.177   8.732,26.078 3.687,26.078 24.596,5.168 "/>
-		</svg>
-		<span class="badger-title hosts">Hosts UP</span>
-		%if app:
-			%service_state = app.datamgr.get_per_hosts_state()
-			%if service_state <= 0:
-			<span class="badger-big badger-critical">{{app.datamgr.get_per_hosts_state()}}%</span>
-			%elif service_state <= 33:
-			<span class="badger-big badger-critical">{{app.datamgr.get_per_hosts_state()}}%</span>
-			%elif service_state <= 66:
-			<span class="badger-big badger-warning">{{app.datamgr.get_per_hosts_state()}}%</span>
-			%elif service_state <= 100:
-			<span class="badger-big badger-ok">{{app.datamgr.get_per_hosts_state()}}%</span>
-			%end
-		%end
-    %if username != 'anonymous':
-    </a>
-		%end
-	</li>
-</ul>
+%synthesis = helper.get_synthesis(app.datamgr.search_hosts_and_services("", user))
+%s = synthesis['services']
+%h = synthesis['hosts']
+
+<div id="one-eye-overall">
+   <div class="panel panel-default panel-darkgrey">
+      <div class="panel-body">
+         <table class="table table-invisible table-condensed">
+            <tbody>
+               <tr id="one-eye-overall-hosts" data-hosts-problems="{{ len(app.datamgr.get_problems(user=user, type='host')) }}">
+                  <td class="font-white"><center>
+                  <b>{{h['nb_elts']}} hosts</b>
+                  </center></td>
+                  %for state in 'up', 'unreachable', 'down', 'pending', 'unknown', 'ack', 'downtime':
+                  <td>
+                     %label = "%s <i>(%s%%)</i>" % (h['nb_' + state], h['pct_' + state])
+                     <a href="/all?search=type:host is:{{state}}">
+                        {{!helper.get_fa_icon_state_and_label(cls='host', state=state, label=label, disabled=(not h['nb_' + state]))}}
+                     </a>
+                  </td>
+                  %end
+               </tr>
+               <tr id="one-eye-overall-services" data-services-problems="{{ len(app.datamgr.get_problems(user=user, type='service')) }}">
+                  <td class="font-white"><center>
+                  <b>{{s['nb_elts']}} services</b>
+                  </center></td>
+                  %for state in 'ok', 'warning', 'critical', 'pending', 'unknown', 'ack', 'downtime':
+                  <td>
+                     %label = "%s <i>(%s%%)</i>" % (s['nb_' + state], s['pct_' + state])
+                     <a href="/all?search=type:service is:{{state}}">
+                        {{!helper.get_fa_icon_state_and_label(cls='service', state=state, label=label, disabled=(not s['nb_' + state]))}}
+                     </a>
+                  </td>
+                  %end
+               </tr>
+            </tbody>
+         </table>
+      </div>
+   </div>
+</div>
+
+<div id="one-eye-icons">
+   <div class="panel panel-default panel-darkgrey">
+      <div class="panel-body">
+         <!-- Hosts -->
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:host is:UP" class="btn btn-sm">
+            %end
+               <div>
+                  %state = h['pct_up']
+                  %font='ok' if state >= app.hosts_states_critical else 'warning' if state >= app.hosts_states_warning  else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{h['nb_up']}} / {{h['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{h['pct_up']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-server font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Hosts up</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:host is:UNREACHABLE" class="btn btn-sm">
+            %end
+               <div>
+                  %state = 100.0-h['pct_unreachable']
+                  %font='ok' if state >= app.hosts_states_critical else 'warning' if state >= app.hosts_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{h['nb_unreachable']}} / {{h['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{h['pct_unreachable']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-server font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Hosts unreachable</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:host is:DOWN" class="btn btn-sm">
+            %end
+               <div>
+                  %state = 100.0-h['pct_down']
+                  %font='ok' if state >= app.hosts_states_critical else 'warning' if state >= app.hosts_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{h['nb_down']}} / {{h['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{h['pct_down']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-server font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Hosts down</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:host is:UNKNOWN" class="btn btn-sm">
+            %end
+               <div>
+                  %state = 100.0-h['pct_unknown']
+                  %font='ok' if state >= app.hosts_states_critical else 'warning' if state >= app.hosts_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{h['nb_unknown']}} / {{h['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{h['pct_unknown']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-server font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Hosts unknown</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <!-- Services -->
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:service is:OK" class="btn btn-sm">
+            %end
+               <div>
+                  %state = s['pct_ok']
+                  %font='ok' if state >= app.services_states_critical else 'warning' if state >= app.services_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{s['nb_ok']}} / {{s['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{s['pct_ok']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-bars font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Services ok</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:service is:WARNING" class="btn btn-sm">
+            %end
+               <div>
+                  %state = 100.0-s['pct_warning']
+                  %font='ok' if state >= app.services_states_critical else 'warning' if state >= app.services_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{s['nb_warning']}} / {{s['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{s['pct_warning']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-bars font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Services warning</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:service is:CRITICAL" class="btn btn-sm">
+            %end
+               <div>
+                  %state = 100.0-s['pct_critical']
+                  %font='ok' if state >= app.services_states_critical else 'warning' if state >= app.services_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{s['nb_critical']}} / {{s['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{s['pct_critical']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-bars font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Services critical</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3">
+            %if username != 'anonymous':
+            <a href="/all?search=type:host is:UNKNOWN" class="btn btn-sm">
+            %end
+               <div>
+                  %state = 100.0-s['pct_unknown']
+                  %font='ok' if state >= app.services_states_critical else 'warning' if state >= app.services_states_warning else 'critical'
+                  <!--<span class="badger-big badger-left font-{{font}}">{{s['nb_unknown']}} / {{s['nb_elts']}}</span>-->
+                  <span class="badger-big badger-right font-{{font}}">{{s['pct_unknown']}}%</span>
+               </div>
+               
+               <i class="fa fa-5x fa-bars font-{{font}}"></i>
+               <p class="badger-title font-{{font}}">&nbsp;Services unknown</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+      </div>
+   </div>
+
+   <div class="panel panel-default panel-darkgrey">
+      <div class="panel-body">
+         <!-- Problems / impacts -->
+         <div class="col-xs-6 col-sm-3 col-md-6">
+            %if username != 'anonymous':
+            <a href="/problems" class="btn btn-sm" title="Left">
+            %end
+               <div>
+                  %h_state, s_state = app.datamgr.get_overall_it_state(user)
+                  %h_problems = len(app.datamgr.get_important_problems(user, type='host', sorter=None))
+                  %font='unknown' if h_state >= 3 else 'critical' if h_state >= 2 else 'warning' if h_state >= 1 else 'ok'
+                  <span class="badger-big badger-left font-{{font}}">{{h_problems}}</span>
+                  {{!helper.get_fa_icon_state(cls='host', state='down') if h_state == 2 else ''}}
+                  {{!helper.get_fa_icon_state(cls='host', state='unreachable') if h_state == 1 else ''}}
+                  {{!helper.get_fa_icon_state(cls='host', state='up') if h_state == 0 else ''}}
+                  {{!helper.get_fa_icon_state(cls='service', state='critical') if s_state == 2 else ''}}
+                  {{!helper.get_fa_icon_state(cls='service', state='warning') if s_state == 1 else ''}}
+                  {{!helper.get_fa_icon_state(cls='service', state='ok') if s_state == 0 else ''}}
+                  %s_problems = len(app.datamgr.get_important_problems(user, type='service', sorter=None))
+                  <span class="badger-big badger-right font-{{font}}">{{s_problems}}</span>
+               </div>
+
+               <i class="fa fa-5x fa-exclamation-triangle"></i>
+               <p class="badger-title itproblem">&nbsp;IT Problems</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+
+         <div class="col-xs-6 col-sm-3 col-md-6">
+            %if username != 'anonymous':
+            <a href="/impacts" class="slidelink btn btn-sm">
+            %end
+               <div>
+                  %overall_state = app.datamgr.get_overall_state(user)
+                  %font='unknown' if overall_state >= 3 else 'critical' if overall_state >= 2 else 'warning' if overall_state >= 1 else 'ok'
+                  <span title="Number of not acknownledged IT problems." class="badger-big font-{{font}}">{{len(app.datamgr.get_important_impacts(user, sorter=None))}}</span>
+               </div>
+               
+               <i class="fa fa-5x fa-flash"></i>
+               <p class="badger-title impacts">&nbsp;Impacts</p>
+               
+            %if username != 'anonymous':
+            </a>
+            %end
+         </div>
+      </div>
+   </div>
+</div>

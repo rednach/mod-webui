@@ -6,7 +6,6 @@
 #    Gregory Starck, g.starck@gmail.com
 #    Hartmut Goebel, h.goebel@goebel-consult.de
 #    Andreas Karfusehr, andreas@karfusehr.de
-#    Forlot Romain, rforlot@yahoo.com
 #
 # This file is part of Shinken.
 #
@@ -23,10 +22,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 
+
 import time
 import copy
 import math
-from pprint import pprint
+import operator
+import re
+
 try:
     import json
 except ImportError:
@@ -41,7 +43,9 @@ except ImportError:
 from shinken.util import safe_print
 from shinken.misc.perfdata import PerfDatas
 from shinken.misc.sorter import hst_srv_sort
+from shinken.log import logger
 from perfdata_guess import get_perfometer_table_values
+from shinken.macroresolver import MacroResolver
 
 
 class Helper(object):
@@ -63,15 +67,6 @@ class Helper(object):
         else:
             return 'No'
 
-    def up_down(self, b):
-        """
-          Return 'up' or 'down' regarding first boolean args value
-        """
-        if b:
-            return 'up'
-        else:
-            return 'down'
-
     def print_float(self, f):
         return '%.2f' % f
 
@@ -83,10 +78,14 @@ class Helper(object):
 
     # For a unix time return something like
     # Tue Aug 16 13:56:08 2011
-    def print_date(self, t):
+    def print_date(self, t, format='%Y-%m-%d %H:%M:%S'):
         if t == 0 or t == None:
             return 'N/A'
-        return time.asctime(time.localtime(t))
+            
+        if format:
+            return time.strftime(format, time.localtime(t))
+        else:
+            return time.asctime(time.localtime(t))
 
     # For a time, print something like
     # 10m 37s  (just duration = True)
@@ -98,7 +97,7 @@ class Helper(object):
     def print_duration(self, t, just_duration=False, x_elts=0):
         if t == 0 or t == None:
             return 'N/A'
-        #print "T", t
+
         # Get the difference between now and the time of the user
         seconds = int(time.time()) - int(t)
 
@@ -114,11 +113,8 @@ class Helper(object):
 
         # Now manage all case like in the past
         seconds = abs(seconds)
-        #print "In future?", in_future
 
-        #print "sec", seconds
         seconds = long(round(seconds))
-        #print "Sec2", seconds
         minutes, seconds = divmod(seconds, 60)
         hours, minutes = divmod(minutes, 60)
         days, hours = divmod(hours, 24)
@@ -150,7 +146,6 @@ class Helper(object):
             if seconds > 0:
                 duration.append('%ds' % seconds)
 
-        #print "Duration", duration
         # Now filter the number of printed elements if ask
         if x_elts >= 1:
             duration = duration[:x_elts]
@@ -162,7 +157,7 @@ class Helper(object):
         # Now manage the future or not print
         if in_future:
             return 'in ' + ' '.join(duration)
-        else:  # past :)
+        else:
             return ' '.join(duration) + ' ago'
 
 
@@ -172,36 +167,13 @@ class Helper(object):
         # First we need ALL elements
         all_elts = self.get_all_linked_elts(elt, levels=levels)
 
-        #print "We got all our elements"
         dicts = []
         for i in all_elts:
-            #safe_print("Elt", i.get_dbg_name())
             ds = self.get_dep_graph_struct(i)
             for d in ds:
                 dicts.append(d)
         j = json.dumps(dicts)
-        #safe_print("Create json", j)
-        #pprint(dicts)
-        #print "create_json_dep_graph::Json creation time", time.time() - t0
         return j
-
-    # Return something like:
-    # {
-    #                  "id": "localhost",
-    #                  "name": "localhost",
-    #                  "data": {"$color":"red", "$dim": 5*2, "some other key": "some other value"},
-    #                  "adjacencies": [{
-    #                          "nodeTo": "main router",
-    #                          "data": {
-    #                              "$type":"arrow",
-    #                              "$color":"gray",
-    #                              "weight": 3,
-    #                              "$direction": ["localhost", "main router"],
-    #                          }
-    #                      }
-    #                      ]
-    #              }
-    # But as a python dict
 
     def get_all_nodes_from_aggregation_node(self, tree):
         res = [{'path' : tree['path'], 'services': tree['services'], 'state': tree['state'], 'full_path': tree['full_path']}]
@@ -218,15 +190,13 @@ class Helper(object):
         hname = elt.get_name()
         tree = self.get_host_service_aggregation_tree(elt)
         all_nodes = self.get_all_nodes_from_aggregation_node(tree)
-        #print "aLL NODES"
-        #pprint(all_nodes)
 
         res = []
         for n in all_nodes:
             d = {'id': self.strip_html_id(hname+n['full_path']), 'name': n['full_path'],
                  'data': {'$type': 'custom',
                           'business_impact': 2,#elt.business_impact,
-                          'img_src': '/static/img/icons/state_%s.png' % n['state'],
+                          'img_src': '/static/images/icons/state_%s.png' % n['state'],
                           },
                  'adjacencies': []
                  }
@@ -240,7 +210,6 @@ class Helper(object):
             # by default the father linkis the host
             father =  elt.get_dbg_name()
             # But if the aggregation is a level1+ it must be the level-1 one
-            #print "FULL PATH"*20, n['full_path'], n['full_path'].count('/'), self.get_aggregation_paths(n['full_path'])
             agg_parts = [s for s in self.get_aggregation_paths(n['full_path']) if s]
 
             # Root, no block for it
@@ -291,19 +260,17 @@ class Helper(object):
 
         
         # Set the right info panel
-        d['data']['infos'] = r'''%s <h2 class="%s"><img style="width: 64px; height:64px" src="%s"/> %s: %s</h2>
-                   <p>since %s</p>
-                   <div style="float:right;"> <a href="%s">%s</a></div>''' % (
-            '<img src="/static/img/icons/star.png" alt="star">' * (elt.business_impact - 2),
-            elt.state.lower(), self.get_icon_state(elt), elt.state, elt.get_full_name(),
-            self.print_duration(elt.last_state_change, just_duration=True, x_elts=2),
-            self.get_link_dest(elt), self.get_button('Go to details', img='/static/images/search.png'))
+        d['data']['infos']  = helper.get_fa_icon_state(elt)
+        d['data']['infos'] += self.get_link(elt, short=False)
+        if elt.business_impact > 2:
+            d['data']['infos'] += "(" + self.get_business_impact_text(elt.business_impact) + ")"
+        d['data']['infos'] += """ is <span class="font-%s"><strong>%s</strong></span>""" % (elt.state.lower(), elt.state)
+        d['data']['infos'] += " since %s" % self.print_duration(elt.last_state_change, just_duration=True, x_elts=2)
 
         d['data']['elt_type'] = elt.__class__.my_type
         d['data']['is_problem'] = elt.is_problem
         d['data']['state_id'] = elt.state_id
 
-        #safe_print("ELT:%s is %s" % (elt.get_full_name(), elt.state))
         if elt.state in ['OK', 'UP', 'PENDING']:
             d['data']['circle'] = 'none'
         elif elt.state in ['DOWN', 'CRITICAL']:
@@ -365,7 +332,55 @@ class Helper(object):
         return my
 
 
+    def get_synthesis(self, elts):
+        h = dict()
+        hosts = [i for i in elts if i.__class__.my_type == 'host']
+        h['elts'] = hosts
+        h['nb_elts'] = len(hosts)
+        if hosts:
+            h['bi'] = max(h.business_impact for h in hosts)
+        else:
+            h['bi'] = 0
+        for state in 'up', 'down', 'unreachable', 'pending':
+            h[state] = [i for i in hosts if i.state == state.upper()]
+        h['unknown'] = list(set(h['elts']) - set(h['up']) - set(h['down']) - set(h['unreachable']) - set(h['pending']))
+        h['ack'] = [i for i in hosts if i.problem_has_been_acknowledged]
+        h['downtime'] = [i for i in hosts if i.in_scheduled_downtime]
+        for state in 'up', 'down', 'unreachable', 'pending', 'unknown', 'ack', 'downtime':
+            h['nb_' + state] = len(h[state])
+            if hosts:
+                h['pct_' + state] = round(100.0 * h['nb_' + state] / h['nb_elts'], 2)
+            else:
+                h['pct_' + state] = 0
+
+        s = dict()
+        services = [i for i in elts if i.__class__.my_type == 'service']
+        s['elts'] = services
+        s['nb_elts'] = len(services)
+        if services:
+            s['bi'] = max(s.business_impact for s in services)
+        else:
+            s['bi'] = 0
+        for state in 'ok', 'critical', 'warning', 'pending', 'unknown':
+            s[state] = [i for i in services if i.state == state.upper()]
+        s['ack'] = [i for i in services if i.problem_has_been_acknowledged]
+        s['downtime'] = [i for i in services if i.in_scheduled_downtime]
+        for state in 'ok', 'critical', 'warning', 'unknown', 'pending', 'ack', 'downtime':
+            s['nb_' + state] = len(s[state])
+            if services:
+                s['pct_' + state] = round(100.0 * s['nb_' + state] / s['nb_elts'], 2)
+            else:
+                s['pct_' + state] = 0
+
+        return {'hosts': h, 'services': s}
+
+
     # Return a button with text, image, id and class (if need)
+###
+###
+## To be removed ... html code will be more clean !
+###
+###
     def get_button(self, text, img=None, id=None, cls=None):
         #s = '<div class="buttons">\n'
         s = '<div class="btn">\n'
@@ -392,103 +407,6 @@ class Helper(object):
         t.sort(hst_srv_sort)
         return t
 
-    def get_input_bool(self, b, id=None):
-        id_s = ''
-        if id:
-            id_s = 'id="%s"' % id
-        if b:
-            return """<input type="checkbox" checked="checked" %s/>\n""" % id_s
-        else:
-            return """<input type="checkbox" %s />\n""" % id_s
-
-
-    def print_business_rules_mobile(self, tree, level=0, source_problems=[]):
-        #safe_print("Should print tree", tree)
-        #safe_print('with source_problems', source_problems)
-        node = tree['node']
-        name = node.get_full_name()
-        fathers = tree['fathers']
-        fathers = sorted(fathers, key=lambda dict: dict['node'].get_full_name())
-        s = ''
-        # Maybe we are the root problem of this, and so we are printing it
-        root_str = ''
-        if node in source_problems:
-            #print "I am a root problem"
-            root_str = ' <span class="alert-small alert-critical"> Root problem</span>'
-        # Do not print the node if it's the root one, we already know its state!
-        if level != 0:
-            s += "%s is %s since %s %s\n" % (self.get_link_mobile(node), node.state, self.print_duration(node.last_state_change, just_duration=True), root_str)
-
-        # If we got no parents, no need to print the expand icon
-        if len(fathers) > 0:
-            # We look if the below tree is goodor not
-            tree_is_good = (node.state_id == 0)
-
-            # If the tree is good, we will use an expand image
-            # and hide the tree
-            if tree_is_good:
-                display = 'none'
-                img = 'expand.png'
-            else:  # we will already show the tree, and use a reduce image
-                display = 'block'
-                img = 'reduce.png'
-
-            s += """<ul id="business-parents-%s" style="display: %s; ">""" % (name, display)
-
-            for n in fathers:
-                sub_node = n['node']
-                sub_s = self.print_business_rules_mobile(n, level=level+1, source_problems=source_problems)
-                s += '<li class="%s">%s</li>' % (self.get_small_icon_state(sub_node), sub_s)
-            s += "</ul>"
-        #safe_print("Returning s:", s)
-        return s
-
-
-    def print_business_rules(self, tree, level=0, source_problems=[]):
-        #safe_print("Should print tree", tree)
-        #safe_print('with source_problems', source_problems)
-        node = tree['node']
-        name = node.get_full_name()
-        fathers = tree['fathers']
-        fathers = sorted(fathers, key=lambda dict: dict['node'].get_full_name())
-        s = ''
-
-        # Maybe we are the root problem of this, and so we are printing it
-        root_str = ''
-        if node in source_problems:
-            #print "I am a root problem"
-            root_str = ' <span class="alert-small alert-critical"> Root problem</span>'
-        # Do not print the node if it's the root one, we already know its state!
-        if level != 0:
-            s += "%s is %s since %s %s\n" % (self.get_link(node), node.state, self.print_duration(node.last_state_change, just_duration=True), root_str)
-
-        # If we got no parents, no need to print the expand icon
-        if len(fathers) > 0:
-            # We look if the below tree is goodor not
-            tree_is_good = (node.state_id == 0)
-
-            # If the tree is good, we will use an expand image
-            # and hide the tree
-            if tree_is_good:
-                display = 'none'
-                img = 'expand.png'
-            else:  # we will already show the tree, and use a reduce image
-                display = 'block'
-                img = 'reduce.png'
-
-            # If we are the root, we already got this
-            if level != 0:
-                s += """<a id="togglelink-%s" href="javascript:toggleBusinessElt('%s')"><img id="business-parents-img-%s" src="/static/images/%s" alt="toggle"> </a> \n""" % (name, name, name, img)
-
-            s += """<ul id="business-parents-%s" style="display: %s; ">""" % (name, display)
-
-            for n in fathers:
-                sub_node = n['node']
-                sub_s = self.print_business_rules(n, level=level+1, source_problems=source_problems)
-                s += '<li class="%s">%s</li>' % (self.get_small_icon_state(sub_node), sub_s)
-            s += "</ul>"
-        #safe_print("Returning s:", s)
-        return s
 
     # Mockup helper
     # User: Frescha
@@ -562,25 +480,32 @@ class Helper(object):
             return 'ok'
         return 'unknown'
 
-    # For an object, give it's business impact as text
-    # and stars if need
-    def get_business_impact_text(self, obj):
+    # Give a business impact as text and stars if need
+    # If text=True, returns text+stars, else returns stars only ...
+    def get_business_impact_text(self, business_impact, text=False):
         txts = {0: 'None', 1: 'Low', 2: 'Normal',
-                3: 'High', 4: 'Very important', 5: 'Top for business'}
-        nb_stars = max(0, obj.business_impact - 2)
-        stars = '<img src="/static/img/icons/star.png" alt="star">\n' * nb_stars
+                3: 'Important', 4: 'Very important', 5: 'Business critical'}
+        nb_stars = max(0, business_impact - 2)
+        stars = '<i class="fa fa-star text-primary"></i>' * nb_stars
 
-        res = "%s %s" % (txts.get(obj.business_impact, 'Unknown'), stars)
+        if text:
+            res = "%s %s" % (txts.get(business_impact, 'Unknown'), stars)
+        else:
+            res = stars
         return res
 
-    # We will output as a ul/li list the impacts of this
-    def got_impacts_list_as_li(self, obj):
-        impacts = obj.impacts
-        r = '<ul>\n'
-        for i in impacts:
-            r += '<li>%s</li>\n' % i.get_full_name()
-        r += '</ul>\n'
-        return r
+    # Give an enabled/disabled state based on glyphicons with optional title and message
+    def get_on_off(self, status=False, title=None, message=''):
+        if not title:
+            if status:
+                title = 'Enabled'
+            else:
+                title = 'Disabled'
+
+        if status:
+            return '''<i title="%s" class="glyphicon glyphicon-ok font-green">%s</i>''' % (title, message)
+        else:
+            return '''<i title="%s" class="glyphicon glyphicon-remove font-red">%s</i>''' % (title, message)
 
     # Return the impacts as a business sorted list
     def get_impacts_sorted(self, obj):
@@ -588,32 +513,18 @@ class Helper(object):
         t.sort(hst_srv_sort)
         return t
 
-    def get_link(self, obj, short=False, mobile=False):
+    def get_link(self, obj, short=False):
         if obj.__class__.my_type == 'service':
             if short:
                 name = obj.get_name()
             else:
                 name = obj.get_full_name()
 
-            if mobile == False:
-                return '<a href="/service/%s"> %s </a>' % (obj.get_full_name(), name)
-            else:
-                return '<a href="/mobile/service/%s"> %s </a>' % (obj.get_full_name(), name)
-        # if not service, host
-        if mobile == False:
-            return '<a href="/host/%s"> %s </a>' % (obj.get_full_name(), obj.get_full_name())
-        else:
-            return '<a href="/mobile/host/%s"> %s </a>' % (obj.get_full_name(), obj.get_full_name())
+            return '<a href="/service/%s"> %s </a>' % (obj.get_full_name(), name)
 
-    def get_link_mobile(self, obj, short=False):
-        if obj.__class__.my_type == 'service':
-            if short:
-                name = obj.get_name()
-            else:
-                name = obj.get_full_name()
-            return '<a href="/mobile/service/%s" rel="external"> %s </a>' % (obj.get_full_name(), name)
         # if not service, host
-        return '<a href="/mobile/host/%s" rel="external"> %s </a>' % (obj.get_full_name(), obj.get_full_name())
+        return '<a href="/host/%s"> %s </a>' % (obj.get_full_name(), obj.get_full_name())
+
 
     # Give only the /service/blabla or /host blabla string, like for buttons inclusion
     def get_link_dest(self, obj):
@@ -631,8 +542,202 @@ class Helper(object):
         if getattr(obj, 'icon_set', '') != '':
             return '/static/images/sets/%s/state_%s.png' % (obj.icon_set, ico)
         else:
-            return '/static/img/icons/state_%s.png' % ico
+            return '/static/images/icons/state_%s.png' % ico
 
+    def get_urls(self, obj, url, default_title="Url", default_icon="globe", popover=False):
+        '''
+        Returns formatted HTML for an element URL
+        
+        url string may contain a list of urls separated by |
+        
+        Each url may be formatted as:
+            - url,,description
+            - title::description,,url
+            - title,,icon::description,,url
+            
+        description is optional
+            
+        If title is not specified, default_title is used as title
+        If icon is not specified, default_icon is used as icon
+        
+        If popover is true, a bootstrap popover is built, else a standard link ...
+        '''
+        logger.debug("[WebUI] get_urls: %s / %s / %s / %d", url, default_title, default_icon, popover)
+        
+        result = []
+        for item in url.split('|'):
+            try:
+                (title, url) = item.split('::')
+            except:
+                title = "%s,,%s" %(default_title, default_icon)
+                url = item
+            
+            try:
+                (title, icon) = title.split(',,')
+            except:
+                icon = default_icon
+            
+            
+            try:
+                (description, real_url) = url.split(',,')
+            except:
+                description = 'No description provided'
+                real_url = url
+            
+            # Replace MACROS in url and description
+            if hasattr(obj, 'get_data_for_checks'):
+                url = MacroResolver().resolve_simple_macros_in_string(real_url, obj.get_data_for_checks())
+                description = MacroResolver().resolve_simple_macros_in_string(description, obj.get_data_for_checks())
+            
+            logger.debug("[WebUI] get_urls, found: %s / %s / %s / %s", title, icon, url, description)
+            
+            if popover:
+                if url != '':
+                    result.append('''<a href="%s" target="_blank" role="button" data-toggle="popover medium" data-html="true" data-content="%s" data-trigger="hover focus" data-placement="bottom"><i class="fa fa-%s"></i>&nbsp;%s</a>''' % (url, description, icon, title))
+                else:
+                    result.append('''<span data-toggle="popover medium" data-html="true" data-content="%s" data-trigger="hover focus" data-placement="bottom"><i class="fa fa-%s"></i>&nbsp;%s</span>''' % (description, icon, title))
+            else:
+                if url != '':
+                    result.append('''<a href="%s" target="_blank" title="%s"><i class="fa fa-%s"></i>&nbsp;%s</a>''' % (url, description, icon, title))
+                else:
+                    result.append('''<span title="%s"><i class="fa fa-%s"></i>&nbsp;%s</span>''' % (description, icon, title))
+
+        return result
+                    
+    def get_element_actions_url(self, obj, default_title="Url", default_icon="globe", popover=False):
+        '''
+        Return list of element action urls
+        '''
+        
+        if obj is not None:
+            return self.get_urls(obj, obj.action_url, default_title=default_title, default_icon=default_icon, popover=popover)
+
+        return None
+
+    def get_element_notes_url(self, obj, default_title="Url", default_icon="globe", popover=False):
+        '''
+        Return list of element notes urls
+        '''
+        
+        if obj is not None and obj.notes:
+            notes = []
+            i=0
+            for item in obj.notes.split('|'):
+                if not obj.notes_url:
+                    notes.append("%s,," % (item))
+                else:
+                    notes_url = obj.notes_url.split('|')
+                    if len(notes_url) > i:
+                        notes.append("%s,,%s" % (item, notes_url[i]))
+                    else:
+                        notes.append("%s,," % (item))
+                i=i+1
+                logger.debug("[WebUI] get_element_notes_url, note: %s", notes)
+                
+            return self.get_urls(obj, '|'.join(notes), default_title=default_title, default_icon=default_icon, popover=popover)
+
+        return []
+
+    def get_fa_icon_state(self, obj=None, cls='host', state='UP', disabled=False, label='', useTitle=True):
+        '''
+            Get an Html formatted string to display host/service state
+            
+            If obj is specified, obj class and state are used.
+            If obj is None, cls and state parameters are used.
+            
+            If disabled is True, the font used is greyed
+            
+            If label is empty, only an icon is returned
+            If label is set as 'state', the icon title is used as text
+            Else, the content of label is used as text near the icon.
+            
+            If useTitle is False, do not include title attribute.
+            
+            Returns a span element containing a Font Awesome icon that depicts 
+           consistently the host/service current state (see issue #147)
+        '''
+        state = obj.state.upper() if obj is not None else state.upper()
+        flapping = (obj and obj.is_flapping) or state=='FLAPPING'
+        ack = (obj and obj.problem_has_been_acknowledged) or state=='ACK'
+        downtime = (obj and obj.in_scheduled_downtime) or state=='DOWNTIME'
+        
+        # Icons depending upon element and real state ...
+        icons = { 'host': 
+                    {   'UP': 'server',
+                        'DOWN': 'server',
+                        'UNREACHABLE': 'server',
+                        'ACK': 'check', 
+                        'DOWNTIME': 'ambulance',
+                        'FLAPPING': 'spinner fa-spin',
+                        'PENDING': 'server',
+                        'UNKNOWN': 'server' },
+                  'service': 
+                    {   'OK': 'arrow-up',
+                        'CRITICAL': 'arrow-down',
+                        'WARNING': 'exclamation',
+                        'ACK': 'check', 
+                        'DOWNTIME': 'ambulance',
+                        'FLAPPING': 'spinner fa-spin',
+                        'PENDING': 'spinner fa-circle-o-notch',
+                        'UNKNOWN': 'question' }
+                }
+
+        cls = obj.__class__.my_type if obj is not None else cls
+
+        back = '''<i class="fa fa-%s fa-stack-2x font-%s"></i>''' % (icons[cls]['FLAPPING'] if flapping else 'circle', state.lower() if not disabled else 'greyed')
+        title = "%s is %s" % (cls, state)
+        if flapping:
+            icon_color = 'font-' + state.lower() if not disabled else 'font-greyed'
+            title += " and is flapping"
+        else:
+            icon_color = 'fa-inverse'
+        if downtime:
+            icon = icons[cls]['DOWNTIME']
+            title += " and in scheduled downtime"
+            icon_style = 'style="opacity: 0.5"'
+        elif ack:
+            icon = icons[cls]['ACK']
+            title += " and acknowledged"
+            icon_style = 'style="opacity: 0.5"'
+        else:
+            icon = icons[cls].get(state, 'UNKNOWN')
+            icon_style = ""
+        front = '''<i class="fa fa-%s fa-stack-1x %s"></i>''' % (icon, icon_color)
+        
+        if useTitle:
+            icon_text = '''<span class="fa-stack" %s title="%s">%s%s</span>''' % (icon_style, title, back, front)
+        else:
+            icon_text = '''<span class="fa-stack" %s">%s%s</span>''' % (icon_style, back, front)
+
+        if label=='':
+            return icon_text
+        else:
+            color = state.lower() if not disabled else 'greyed'
+            if label=='title':
+                label=title
+            return '''
+              <span class="font-%s">
+                 %s
+                 <span class="num">%s</span>
+              </span> 
+              ''' % (color,
+                     icon_text,
+                     label)
+        
+
+    def get_fa_icon_state_and_label(self, obj=None, cls='host', state='UP', label="", disabled=False, useTitle=True):
+        color = state.lower() if not disabled else 'greyed'
+        return '''
+          <span class="font-%s">
+             %s
+             <span class="num">%s</span>
+          </span> 
+          ''' % (color,
+                 self.get_fa_icon_state(obj=obj, cls=cls, state=state, disabled=disabled, useTitle=useTitle),
+                 label)
+
+
+    # :TODO:maethor:150609: Rewrite this function
     # Get
     def get_navi(self, total, pos, step=30):
         step = float(step)
@@ -645,12 +750,9 @@ class Helper(object):
 
         nb_max_items = 2
         
-        if nb_pages == 0 or nb_pages == 1:
-            return None
-
         if current_page >= nb_max_items:
             # Name, start, end, is_current
-            res.append((u'« First', 0, step, False))
+            res.append((u'«', 0, step, False))
             res.append(('...', None, None, False))
 
         #print "Range,", current_page - 1, current_page + 1
@@ -665,53 +767,54 @@ class Helper(object):
                 continue
 
             end = int((i+1) * step)
-            res.append(('Page %d' % (i+1), start, end, is_current))
+            res.append(('%d' % (i+1), start, end, is_current))
 
         if current_page < nb_pages - nb_max_items:
             start = int((nb_pages - (nb_max_items - 1)) * step)
             end = int(total)
             # end = int(nb_pages * step)
             res.append(('...', None, None, False))
-            res.append((u'Last »', start, end, False))
+            res.append((u'»', start, end, False))
 
         return res
 
     # Get a perfometer part for html printing
-    def get_perfometer(self, elt):
-        if elt.perf_data != '':
-            r = get_perfometer_table_values(elt)
-            # If the perfmeter are not good, bail out
+    def get_perfometer(self, elt, metric=None):
+        if elt.perf_data:
+            r = get_perfometer_table_values(elt, metric=metric)
             if r is None:
-                return '\n'
+                return ''
 
-            lnk = r['lnk']
+            #lnk = r['lnk']
             metrics = r['metrics']
             title = r['title']
-            s = '<a href="%s">' % lnk
-            s += '''<div class="graph">
-                       <table>
-                          <tbody>
-                            <tr>\n'''
-
-            for (color, pct) in metrics:
-                s += '            <td style="background-color: %s; width: %s%%;"></td>\n' % (color, pct)
-
-            s += '''        </tr>
-                         </tbody>
-                      </table>
-                    </div>
-                    <div class="text">%s</div>
-                    <img class="glow" src="/static/images/glow.png"/>
-                 </a>\n''' % title
+            s = ''
+            if r['lnk'] != '#':
+                s += '<a href="%s">' % lnk
+            if metrics:
+                # metrics[0][0] is the color associated to the current state
+                # metrics[0][1] is a percentage:
+                #   - real percentage between min and max (if defined)
+                #   - else 100
+                logger.debug("[WebUI] get_perfometer: %s, %s / %s", elt.get_name(), metrics[0][0], metrics[0][1])
+                s += '''<div class="progress" style="min-width:100px;">
+                            <div title="%s" class="ellipsis progress-bar progress-bar-%s" role="progressbar" aria-valuenow="%s" aria-valuemin="0" aria-valuemax="100" style="min-width: 50px; width:%s%%"> 
+                            %s
+                            </div>
+                        </div>''' % (title, metrics[0][0], metrics[0][1], metrics[0][1], title)
+            if r['lnk'] != '#':
+                s += '</a>'
+                
             return s
-        return '\n'
+            
+        return ''
 
     # TODO: Will look at the string s, and return a clean output without
     # danger for the browser
     def strip_html_output(self, s):
         return s
 
-    # We want the html id of an hostor a service. It's basically
+    # We want the html id of an host or a service. It's basically
     # the full_name with / changed as -- (because in html, / is not valid :) )
     def get_html_id(self, elt):
         return self.strip_html_id(elt.get_full_name())
@@ -719,14 +822,13 @@ class Helper(object):
     def strip_html_id(self, s):
         return s.replace('/', '--').replace(' ', '_').replace('.', '_').replace(':', '_')
 
+    # Make an HTML element identifier
+    def make_html_id(self, s):
+        return re.sub('[^A-Za-z0-9]', '', s)
+
     # URI with spaces are BAD, must change them with %20
     def get_uri_name(self, elt):
         return elt.get_full_name().replace(' ', '%20')
-
-    # say if this user can launch an action or not
-    def can_action(self, user):
-        return user.is_admin or user.can_submit_commands
-
 
     def get_aggregation_paths(self, p):
         p = p.strip()
@@ -735,7 +837,6 @@ class Helper(object):
         if p.endswith('/'):
             p = p[-1]
         return [s.strip() for s in p.split('/')]
-
 
     def compute_aggregation_tree_worse_state(self, tree):
         # First ask to our sons to compute their states
@@ -747,16 +848,17 @@ class Helper(object):
         states = [s['state'] for s in tree['sons']]
         for s in tree['services']:
             states.append(s.state.lower())
+            
         # ok now look at what is worse here
         order = ['critical', 'warning', 'unknown', 'ok', 'pending']
         for o in order:
             if o in states:
                 tree['state'] = o
                 return
+                
         # Should be never call or we got a major problem...
         tree['state'] = 'unknown'
         
-
     def assume_and_get_path_in_tree(self, tree, paths):
         #print "Tree on start of", paths, tree
         current_full_path = ''
@@ -765,36 +867,33 @@ class Helper(object):
             if not p:
                 continue
             current_full_path += '/'+p
-            founded = False
+            found = False
             for s in tree['sons']:
                 # Maybe we find the good son, if so go on this level
                 if p == s['path']:
                     tree = s
-                    founded = True
+                    found = True
                     break
             # Did we find our son? If no, create it and jump into it
-            if not founded:
+            if not found:
                 s = {'path' : p, 'sons' : [], 'services':[], 'state':'unknown', 'full_path':current_full_path}
                 tree['sons'].append(s)
                 tree = s
         return tree
 
-
     def get_host_service_aggregation_tree(self, h, app=None):
         tree = {'path' : '/', 'sons' : [], 'services':[], 'state':'unknown', 'full_path':'/'}
         for s in h.services:
-            if app.can_see_this_elt(s):
-                p = s.aggregation
-                paths = self.get_aggregation_paths(p)
-                #print "Service", s.get_name(), "with path", paths
-                leaf = self.assume_and_get_path_in_tree(tree, paths)
-                leaf['services'].append(s)
+            p = s.aggregation
+            paths = self.get_aggregation_paths(p)
+            leaf = self.assume_and_get_path_in_tree(tree, paths)
+            leaf['services'].append(s)
 
         self.compute_aggregation_tree_worse_state(tree)
 
         return tree
 
-    def print_aggregation_tree(self, tree, html_id):
+    def print_aggregation_tree(self, tree, html_id, expanded=False, max_sons=5):
         path = tree['path']
         full_path = tree['full_path']
         sons = tree['sons']
@@ -805,43 +904,145 @@ class Helper(object):
 
         display = 'block'
         img = 'reduce.png'
+        icon = 'minus'
+        list_state = 'expanded'
 
         if path != '/':
             # If our state is OK, hide our sons
-            if state == 'ok':
+            if state == 'ok' and (not expanded or len(sons) >= max_sons):
                 display = 'none'
                 img = 'expand.png'
+                icon = 'plus'
+                list_state = 'collapsed'
 
-            s += """<span class="alert-small alert-%s"> %s </span>""" % (state, path)
-            s += """<a id="togglelink-aggregation-%s" href="javascript:toggleAggregationElt('%s')"><img id="aggregation-toggle-img-%s" src="/static/images/%s" alt="toggle"> </a> \n""" % (_id, _id, _id, img)
+            s += """<a class="toggle-list" data-state="%s" data-target="ag-%s"> <span class="alert-small alert-%s"> <i class="fa fa-%s"></i> %s&nbsp;</span> </a>""" % (list_state, _id, state, icon, path)
 
-        s += """<ul id="aggregation-node-%s" style="display: %s; ">""" % (_id, display)
+        s += """<ul name="ag-%s" class="list-group" style="display: %s;">""" % (_id, display)
         # If we got no parents, no need to print the expand icon
         if len(sons) > 0:
             for son in sons:
-                sub_s = self.print_aggregation_tree(son, html_id)
-                s += '<li class="no_list_style">%s</li>' % sub_s
+                sub_s = self.print_aggregation_tree(son, html_id, expanded=expanded)
+                s += '<li class="list-group-item">%s</li>' % sub_s
 
 
-        s += '<li class="no_list_style">'
+        s += '<li class="list-group-item">'
         if path == '/' and len(services) > 0:
             s += """<span class="alert-small"> Others </span>"""
-        s += '<ul style="margin-left: 0px;">'
-        # Sort our services before print them
-        services.sort(hst_srv_sort)
-        for svc in services:
-            s += '<li class="%s">' % svc.state.lower()
-            s += """<span class='alert-small alert-%s' style="">%s</span> for <span style="">%s since %s</span>""" % (svc.state.lower(), svc.state, self.get_link(svc, short=True), self.print_duration(svc.last_state_change, just_duration=True, x_elts=2))
-            for i in range(0, svc.business_impact-2):
-                s += '<img alt="icon state" src="/static/images/star.png">'
-            s += '</li>'
-        s += "</ul></li>"
+            
+        if len(services):
+            s += '<ul class="list-group">'
+            # Sort our services before print them
+            services.sort(hst_srv_sort)
+            for svc in services:
+                s += '<li class="list-group-item">'
+                s += helper.get_fa_icon_state(svc)
+                s += self.get_link(svc, short=True)
+                if svc.business_impact > 2:
+                    s += "(" + self.get_business_impact_text(svc.business_impact) + ")"
+                s += """ is <span class="font-%s"><strong>%s</strong></span>""" % (svc.state.lower(), svc.state)
+                s += " since %s" % self.print_duration(svc.last_state_change, just_duration=True, x_elts=2)
+                s += "</li>"
+            s += "</ul></li>"
+        else:
+            s += "</li>"
 
                 
         s += "</ul>"
-        #safe_print("Returning s:", s)
+
         return s
+ 
+    def print_business_rules(self, tree, level=0, source_problems=[]):
+        node = tree['node']
+        name = node.get_full_name()
+        fathers = tree['fathers']
+        fathers = sorted(fathers, key=lambda dict: dict['node'].get_full_name())
+        s = ''
 
+        # Maybe we are the root problem of this, and so we are printing it
+        root_str = ''
+        if node in source_problems:
+            root_str = ' <span class="alert-small alert-critical"> Root problem</span>'
+            
+        # Do not print the node if it's the root one, we already know its state!
+        if level != 0:
+            s += helper.get_fa_icon_state(node)
+            s += self.get_link(node, short=True)
+            if node.business_impact > 2:
+                s += "(" + self.get_business_impact_text(node.business_impact) + ")"
+            s += """ is <span class="font-%s"><strong>%s</strong></span>""" % (node.state.lower(), node.state)
+            s += " since %s" % self.print_duration(node.last_state_change, just_duration=True, x_elts=2)
+
+        # If we got no parents, no need to print the expand icon
+        if len(fathers) > 0:
+            # We look if the below tree is good or not
+            tree_is_good = (node.state_id == 0)
+
+            # If the tree is good, we will use an expand image
+            # and hide the tree
+            if tree_is_good:
+                display = 'none'
+                list_state = 'collapsed'
+                icon = 'plus'
+            else:  # we will already show the tree, and use a reduce image
+                display = 'block'
+                list_state = 'expanded'
+                icon = 'minus'
+
+            # If we are the root, we already got this
+            if level != 0:
+                s += '''<a class="pull-right toggle-list" data-state="%s" data-target="bp-%s"> <i class="fa fa-%s"></i> </a>''' % (list_state, self.make_html_id(name), icon)
+
+            s += """<ul class="list-group" name="bp-%s" style="display: %s;">""" % (self.make_html_id(name), display)
+
+            for n in fathers:
+                sub_node = n['node']
+                sub_s = self.print_business_rules(n, level=level+1, source_problems=source_problems)
+                s += '<li class="list-group-item %s">%s</li>' % (self.get_small_icon_state(sub_node), sub_s)
+            s += "</ul>"
+
+        return s
+   
+    def get_timeperiod_html(self, tp):
+        if len(tp.dateranges) == 0:
+            return ''
+            
+        # Build a definition list ...
+        content = '''<dl>'''
+        for dr in sorted(tp.dateranges, key=operator.methodcaller("get_start_and_end_time")):
+            (dr_start, dr_end) = dr.get_start_and_end_time()
+            dr_start = time.strftime("%d %b %Y", time.localtime(dr_start))
+            dr_end = time.strftime("%d %b %Y", time.localtime(dr_end))
+            if dr_start==dr_end:
+                content += '''<dd>%s:</dd>''' % (dr_start)
+            else:
+                content += '''<dd>From: %s, to: %s</dd>''' % (dr_start, dr_end)
+                
+            if len(dr.timeranges) > 0:
+                content += '''<dt>'''
+                idx=1
+                for timerange in dr.timeranges:
+                    content += '''&nbsp;%s-%s''' % ("%02d:%02d" % (timerange.hstart, timerange.mstart), "%02d:%02d" % (timerange.hend, timerange.mend))
+                    idx += 1
+                content += '''</dt>'''
+        content += '''</dl>'''
+            
+        # Build a definition list ...
+        if tp.exclude:
+            content += '''<dl> Excluded: '''
+            for excl in tp.exclude:
+                content += self.get_timeperiod_html(excl)
+            content += '''</dl>'''
     
+        return content
 
+    def state_to_class(self, state):
+        '''Convert a Shinken state to a bootstrap3 class'''
+        classes = {"OK": 'success', "UP": 'success',
+                  "DOWN": 'danger', "CRITICAL": 'danger',
+                  "WARNING": 'warning',
+                  "UNKNOWN": 'info'}
+        if state in classes:
+            return classes[state]
+        else:
+            return 'default'
 helper = Helper()

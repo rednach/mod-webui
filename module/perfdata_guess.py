@@ -1,5 +1,4 @@
 #!/usr/bin/python
-
 # -*- coding: utf-8 -*-
 
 # Copyright (C) 2009-2012:
@@ -7,6 +6,7 @@
 #    Gerhard Lausser, Gerhard.Lausser@consol.de
 #    Gregory Starck, g.starck@gmail.com
 #    Hartmut Goebel, h.goebel@goebel-consult.de
+#    Frederic Mohier, frederic.mohier@gmail.com
 #
 # This file is part of Shinken.
 #
@@ -25,47 +25,44 @@
 
 import math
 
-from shinken.util import safe_print
 from shinken.misc.perfdata import PerfDatas
+from shinken.log import logger
 
 
 # Will try to return a dict with:
 # lnk: link to add in this perfdata thing
 # title: text to show on it
 # metrics: list of ('html color', percent) like [('#68f', 35), ('white', 64)]
-def get_perfometer_table_values(elt):
+def get_perfometer_table_values(elt, metric=None):
     # first try to get the command name called
     cmd = elt.check_command.call.split('!')[0]
-    safe_print("Looking for perfometer value for command", cmd)
+    logger.debug("[WebUI] Looking for perfometer value for element: %s, command: %s", elt.get_full_name(), cmd)
 
     tab = {'check_http': manage_check_http_command,
            'check_ping': manage_check_ping_command,
            'check_tcp': manage_check_tcp_command,
-           'check_ftp': manage_check_tcp_command,
         }
 
     f = tab.get(cmd, None)
     if f:
-        return f(elt)
+        return f(elt, metric)
 
     try:
-        r = manage_unknown_command(elt)
+        r = manage_unknown_command(elt, metric)
     except:
         return None
     return r
 
 
-def manage_check_http_command(elt):
-    safe_print('Get check_http perfdata of', elt.get_full_name())
+def manage_check_http_command(elt, metric='time'):
+    logger.debug("[WebUI] Get check_http perfdata of %s", elt.get_full_name())
     p = PerfDatas(elt.perf_data)
-    if not 'time' in p:
-        print "No time in p"
+    if not metric in p:
         return None
 
-    m = p['time']
+    m = p[metric]
     v = m.value
     if not v:
-        print "No value, I bailout"
         return None
 
     # Percent of ok should be time/1s
@@ -84,19 +81,16 @@ def manage_check_http_command(elt):
     #print "HTTP: return", {'lnk': lnk, 'metrics': metrics, 'title': title}
     return {'lnk': lnk, 'metrics': metrics, 'title': title}
 
-
-def manage_check_ping_command(elt):
-    safe_print('Get check_ping perfdata of', elt.get_full_name())
+def manage_check_ping_command(elt, metric='rta'):
+    logger.debug("[WebUI] Get check_ping perfdata of %s", elt.get_full_name())
     p = PerfDatas(elt.perf_data)
-    if not 'rta' in p:
-        print "No rta in p"
+    if not metric in p:
         return None
 
-    m = p['rta']
+    m = p[metric]
     v = m.value
     crit = m.critical
     if not v or not crit:
-        print "No value, I bailout"
         return None
 
     # Percent of ok should be the log of time versus max/2
@@ -116,19 +110,16 @@ def manage_check_ping_command(elt):
     #print "HTTP: return", {'lnk': lnk, 'metrics': metrics, 'title': title}
     return {'lnk': lnk, 'metrics': metrics, 'title': title}
 
-
-def manage_check_tcp_command(elt):
-    safe_print('Get check_tcp perfdata of', elt.get_full_name())
+def manage_check_tcp_command(elt, metric='time'):
+    logger.debug("[WebUI] Get check_tcp perfdata of %s", elt.get_full_name())
     p = PerfDatas(elt.perf_data)
-    if not 'time' in p:
-        print "No time in p"
+    if not metric in p:
         return None
 
-    m = p['time']
+    m = p[metric]
     v = m.value
 
     if not v or not m.max:
-        print "No value, I bailout"
         return None
 
     # Percent of ok should be the log of time versus m.max / 2
@@ -155,78 +146,67 @@ def manage_check_tcp_command(elt):
     return {'lnk': lnk, 'metrics': metrics, 'title': title}
 
 
-def manage_unknown_command(elt):
-    safe_print('Get an unmanaged command perfdata of', elt.get_full_name())
+def manage_unknown_command(elt, metric=None):
+    logger.debug("[WebUI] perfometer, manage command for: %s, metric: %s", elt.get_full_name(), metric)
     p = PerfDatas(elt.perf_data)
     if len(p) == 0:
         return None
 
-    m = None
     # Got some override name we know to be ok for printing
-    if 'time' in p:
-        m = p['time']
+    if metric is None and 'time' in p and p['time'].value is not None:
+        metric = p['time']
     else:
-        for v in p:
-            #print "Look for", v
-            if v.name is not None and v.value is not None:
-                m = v
-                break
-
-    prop = m.name
-    safe_print("Got a property", prop, "and a value", m)
-    v = m.value
-    if not v:
-        print "No value, I bailout"
+        if metric is None:
+            for v in p:
+                if v.name is not None and v.value is not None:
+                    metric = v
+        else:
+            for v in p:
+                if v.name is not None and v.value is not None and v.name == metric:
+                    metric = v
+        
+    if metric is None:
+        return None
+    
+    name = metric.name
+    value = metric.value
+    logger.debug("[WebUI] perfometer, manage command, metric: %s=%d", name, value)
+    if not value:
         return None
 
-    # Now look if min/max are available or not
+    
     pct = 0
-    if m.min and m.max and (m.max - m.min != 0):
-        pct = 100 * (v / (m.max - m.min))
-    else:  # ok, we will really guess this time...
-        # Percent of ok should be time/10s
-        pct = 100 * (v / 10)
+    # If metric UOM is %
+    if metric.uom and metric.uom == '%':
+        # Return value
+        pct = value
+    # Look if min/max are defined
+    elif metric.min and metric.max and (metric.max - metric.min != 0):
+        pct = 100 * (value / (metric.max - metric.min))
+    else:
+        # Assume value is 100%
+        pct = 100
 
-    # go to int
-    pct = int(pct)
-    # But at least 1%
+    # Percentage is at least 1% and max 100%
     pct = max(1, pct)
-    # And max to 100%
     pct = min(pct, 100)
+    
+    # Title
+    try:
+        title = '%s%s' % (value, metric.uom)
+    except:
+        title = '%s' % (value)
+
+    # Link
     lnk = '#'
 
-    color = get_linear_color(elt, prop)
-    s_color = 'RGB(%d,%d,%d)' % color
-    metrics = [(s_color, pct), ('white', 100-pct)]
-    uom = '' or m.uom
-    title = '%s%s' % (v, uom)
-    #print "HTTP: return", {'lnk': lnk, 'metrics': metrics, 'title': title}
-    return {'lnk': lnk, 'metrics': metrics, 'title': title}
+    # Get the color
+    base = {0: 'success', 1: 'warning', 2: 'danger', 3: 'info'}
+    color = base.get(elt.state_id, 'info')
+    
+    logger.debug("[WebUI] perfometer, manage command, metric: %s=%d -> %d", name, value, pct)
 
-
-# Get a linear color by looking at the command name
-# and the elt status to get a unique value
-def get_linear_color(elt, name):
-    # base colors are
-    #  #6688ff (102,136,255) light blue for OK
-    #  #ffdd65 (255,221,101) ligth wellow for warning
-    #  #ff6587 (191,75,101) light red for critical
-    #  #b3c4ff (179,196,255) very light blue for unknown
-    base = {0: (102, 136, 255), 1: (255, 221, 101), 2: (191, 75, 101)}
-    state_id = get_stateid(elt)
-
-    c = base.get(state_id, (179, 196, 255))
-
-    # Get a "hash" of the metric name
-    h = hash(name) % 25
-    #print "H", h
-    # Most value are high in red, so to do not overlap, go down
-    red = (c[0] - h) % 256
-    green = (c[1] - h) % 256
-    blue = (c[2] - h) % 256
-    color = (red, green, blue)
-    print "Get color", color
-    return color
+    return {'lnk': lnk, 'metrics': [(color, pct)], 'title': title}
 
 
 def get_stateid(elt):

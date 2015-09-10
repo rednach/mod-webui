@@ -3,7 +3,7 @@
      Gerhard Lausser, Gerhard.Lausser@consol.de
      Gregory Starck, g.starck@gmail.com
      Hartmut Goebel, h.goebel@goebel-consult.de
-     Andreas Karfusehr, andreas@karfusehr.de
+     Frédéric Mohier, frederic.mohier@gmail.com
 
  This file is part of Shinken.
 
@@ -21,75 +21,23 @@
  along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
-function translate_problem(){
-    var to_slide = $('.sliding');
-    to_slide.each(function(idx){
-	var pos = $(this).position();
-	var new_pos = pos.left - 400;
-
-	$(this).animate({'left':new_pos});
-
-    });
-
+/*
+ * Function called when the page is loaded and on each page refresh ...
+ */
+function on_page_refresh() {
+   $('#wall-impacts').bxSlider({
+     auto: true,
+     autoControls: true
+   });
+   $('#wall-problems').bxSlider({
+     auto: true,
+     autoControls: true
+   });
+   $('#wall-last-problems').bxSlider({
+     auto: true,
+     autoControls: true
+   });
 }
 
-
-function translate_impact(to_right){
-    var to_slide = $('.sliding-impacts');
-    //alert('Nb elements'+to_slide.length);
-    to_slide.each(function(idx){
-	//alert('Element'+$(this));
-	var pos = $(this).position();
-	var new_pos = pos;
-	if(to_right){
-   	    new_pos = pos.left - 400;
-   	}else{
-   	    new_pos = pos.left + 400;
-   	}
-
-	$(this).animate({'left':new_pos});
-
-    });
-
-}
-
-
-function go_right(){
-   translate_impact(true);
-}
-
-function go_left(){
-   translate_impact(false);
-}
-
-/* And we will initialise the slide of our problems too*/
-$(document).ready(function(){
-    var nb_elements = $('.sliding').length;
-    // If there is not enough elements, don't even slide
-    // So we print in each page 9 elements. No need to slide if lower
-    if(nb_elements > 9){
-	var nb_slides = nb_elements / 9;
-	var slide_interval = 60/nb_slides;
-
-	slide_interval = Math.max(slide_interval, 10000);
-	setInterval( translate_problem, slide_interval);//10000);
-    }
-
-});
-
-
-/* And we will initialise the slide of our problems too*/
-$(document).ready(function(){
-    var nb_elements = $('.sliding-impacts').length;
-    // If there is not enough elements, don't even slide
-    // So we print in each page 6 elements. No need to slide if lower
-    if(nb_elements > 6){
-	var nb_slides = nb_elements / 6;
-	var slide_interval = 60/nb_slides;
-
-	slide_interval = Math.max(slide_interval, 10000);
-	setInterval( go_right, slide_interval);
-    }
-
-});
+// First page loading ...
+on_page_refresh();

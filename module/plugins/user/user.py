@@ -39,15 +39,14 @@ except ImportError:
 app = None
 
 
+# Test user preferences page ...
+
+def show_pref():
+    return {}
+
+
 def save_pref():
-    # First we look for the user sid
-    # so we bail out if it's a false one
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
+    user = app.request.environ['USER']
     key = app.request.forms.get('key', None)
     value = app.request.forms.get('value', None)
 
@@ -56,21 +55,13 @@ def save_pref():
 
     s = json.dumps('{%s: %s}' % (key, value))
 
-    print "We will save for the user", user.get_name(), key, ':', value
-    print "As %s" % s
-
-    app.set_user_preference(user, key, value)
+    app.prefs_module.set_ui_user_preference(user, key, value)
 
     return
 
 
 def save_common_pref():
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-        return
-
+    user = app.request.environ['USER']
     key = app.request.forms.get('key', None)
     value = app.request.forms.get('value', None)
 
@@ -83,10 +74,15 @@ def save_common_pref():
     print "As %s" % s
 
     if user.is_admin:
-        app.set_common_preference( key, value)
+        app.prefs_module.set_ui_common_preference( key, value)
 
     return
 
 
-pages = {save_pref: {'routes': ['/user/save_pref'], 'method': 'POST'}, save_common_pref: {'routes': ['/user/save_common_pref'], 'method': 'POST'}}
+pages = {
+        show_pref: {'routes': ['/user/pref'], 'view': 'user_pref', 'static': True},
+        
+        save_pref: {'routes': ['/user/save_pref'], 'method': 'POST'}, 
+        save_common_pref: {'routes': ['/user/save_common_pref'], 'method': 'POST'}
+        }
 

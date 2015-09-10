@@ -1,63 +1,28 @@
 
+<!-- HTML map container -->
+<div class="depgraph_container_widget">
+   %if not elt:
+      <center>
+         <h3>No element to graph.</h3>
+      </center>
+   %else:
+      %helper = app.helper
 
-%print 'Elt value?', elt
-%import time
+      %rebase("widget", title='Dependencies graph for ' + elt.get_full_name(),  js=['depgraph/js/jit-yc.js', 'depgraph/js/excanvas.js'],  css=['depgraph/css/eltdeps.css', 'depgraph/css/eltdeps_widget.css'])
 
-%# If got no Element, bailout
-%if not elt:
-%rebase widget title='Invalid element name'
+      <script src="/static/depgraph/js/eltdeps.js" />
+      <script type="text/javascript">
+         $(document).ready(function (){
+            init_graph('{{elt.get_full_name()}}', {{!app.helper.create_json_dep_graph(elt, levels=4)}}, $('#{{graphId}}').width(), 300, '{{app.helper.get_html_id(elt)}}');
+         });
+      </script>
 
-Invalid element
-
-%else:
-
-%helper = app.helper
-%datamgr = app.datamgr
-
-
-<script type="text/javascript">
-  var depgraph_width = 400;
-  var depgraph_height = 400;
-  var depgraph_injectInto = 'infovis-'+'{{helper.get_html_id(elt)}}';
-</script>
-
-
-%rebase widget globals(), title='Dependencies graph of ' + elt.get_full_name(),  js=['depgraph/js/jit-yc.js', 'depgraph/js/excanvas.js', 'depgraph/js/eltdeps.js'],  css=['depgraph/css/eltdeps.css', 'depgraph/css/eltdeps_widget.css'],  print_menu=False
-
-
-
-<script src=/static/depgraph/js/eltdeps.js></script>
-<script type="text/javascript">
-  
-  // var graph_root = '{{elt.get_full_name()}}';
-  // var json_graph = {{!helper.create_json_dep_graph(elt, levels=4)}};
-  //console.log('Show the graph'+json_graph);
- 
- 
- $(document).ready(init_graph('{{elt.get_full_name()}}', {{!helper.create_json_dep_graph(elt, levels=4)}},400, 400,'{{helper.get_html_id(elt)}}'));
- 
- 
-</script>
-
-
-
-
-<div id="right-container" class="border">
-  <div id="inner-details-{{helper.get_html_id(elt)}}">
+      <div id="{{graphId}}">
+         <div class="depgraph-log" id="log-{{app.helper.get_html_id(elt)}}">Loading element informations...</div>
+         
+         <div class="depgraph-graph" id="infovis-{{app.helper.get_html_id(elt)}}"> </div>
+         
+         <div class="depgraph-details" id="inner-details-{{app.helper.get_html_id(elt)}}"></div>
+      </div>
+   %end
 </div>
-  
-</div>
-
-<div id="infovis-{{helper.get_html_id(elt)}}"> </div>
-
-  <div id="log">Loading element informations...</div>
-</div>
-  
-<div class="clear"></div>
-</div>
-
-%#End of the Host Exist or not case
-%end
-
-
-

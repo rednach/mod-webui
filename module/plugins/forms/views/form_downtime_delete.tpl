@@ -1,36 +1,27 @@
 <script type="text/javascript">
-	function submit_local_form() {
-		var form = document.forms['input_form'];
-
-		delete_all_downtimes('{{name}}');
-		$('#modal').modal('hide')
-	}
+   function submit_local_form() {
+      // Launch downtimes deletion request and bailout this modal view
+      delete_downtime('{{name}}', '{{downtime}}');
+      // If a comment is to be added ...
+      if ($('#reason').val()) {
+         add_comment("{{name}}", '{{user.get_name()}}', $('#reason').val());
+      }
+      start_refresh();
+      $('#modal').modal('hide');
+   }
 </script>
 
+<div class="modal-header">
+   <a class="close" data-dismiss="modal">×</a>
+   <h3>Confirm downtime '{{downtime}}' deletion</h3>
+</div>
 
-<div class="modal-dialog">
-	<div class="modal-content">
-		<div class="modal-header">
-			<a class="close" data-dismiss="modal">×</a>
-			<h3>Deletion confirm</h3>
-		</div>
+<div class="modal-body">
+   <form name="input_form" role="form">
+      <div class="form-group">
+         <textarea name="reason" id="reason" class="form-control" rows="5" placeholder="Comment ...">Dowtime '{{downtime}}' for {{name}} deleted by {{user.get_name()}}.</textarea>
+      </div>
 
-		<div class="modal-body">
-			<form name="input_form" class="form-horizontal" role="form">
-				<div class="form-group">
-					<label class="col-sm-12 control-label">Are you sure you want to delete all downtimes ?</label>
-					<!--
-					<div class="col-sm-1">
-						<textarea type="textarea" name='downtime' class="span4 hide" rows=5 placeholder="Reason..."/>
-					</div>
-					-->
-				</div>
-			</form>
-		</div>
-
-		<div class="modal-footer">
-			<a href="javascript:submit_local_form();" class="btn btn-danger"> <i class="icon-trash"></i> Delete</button></a>
-			<a href="#" class="btn" data-dismiss="modal"> Close</a>
-		</div>
-	</div>
+      <a href="javascript:submit_local_form();" class="btn btn-danger btn-lg btn-block"> <i class="fa fa-save"></i> Submit</a>
+   </form>
 </div>

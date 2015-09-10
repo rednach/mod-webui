@@ -2,7 +2,7 @@
 
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2009-2012:
+# Copyright (C) 2009-2014:
 #    Gabes Jean, naparuba@gmail.com
 #    Gerhard Lausser, Gerhard.Lausser@consol.de
 #    Gregory Starck, g.starck@gmail.com
@@ -26,6 +26,7 @@
 ### Will be populated by the UI with it's own value
 app = None
 
+from shinken.log import logger
 
 # Our page
 def get_page():
@@ -33,14 +34,14 @@ def get_page():
 
 
 def user_login():
-    user = app.get_user_auth()
-    if user:
-        app.bottle.redirect("/problems")
+    if app.request.get_cookie("user", secret=app.auth_secret):
+        app.bottle.redirect("/")
 
     err = app.request.GET.get('error', None)
     login_text = app.login_text
+    company_logo = app.company_logo
 
-    return {'error': err, 'login_text': login_text}
+    return {'error': err, 'login_text': login_text, 'company_logo': company_logo}
 
 
 def user_login_redirect():
@@ -55,35 +56,36 @@ def user_logout():
         app.response.set_cookie('user', False, secret=app.auth_secret, path='/')
     else:
         app.response.set_cookie('user', '', secret=app.auth_secret, path='/')
+        
+    logger.info("[WebUI]  user '%s' signed out", user_name)
     app.bottle.redirect("/user/login")
     return {}
 
 
 def user_auth():
-    print "Got forms"
     login = app.request.forms.get('login', '')
     password = app.request.forms.get('password', '')
-    is_mobile = app.request.forms.get('is_mobile', '0')
-    is_auth = app.check_auth(login, password)
-
-    if is_auth:
-        app.response.set_cookie('user', login, secret=app.auth_secret, path='/', expires='Fri, 01 Jan 2100 00:00:00 GMT')
-        if is_mobile == '1':
-            app.bottle.redirect("/mobile/main")
-        else:
-            app.bottle.redirect("/problems")
+    logger.info("[WebUI]  user '%s' is signing in ...", login)
+    
+    # Tries to authenticate user
+    is_authenticated = app.check_authentication(login, password)
+    if is_authenticated:
+        app.response.set_cookie('user', login, secret=app.auth_secret, path='/')
+        logger.info("[WebUI]  user '%s' signed in", login)
+        app.bottle.redirect("/dashboard")
     else:
+        logger.warning("[WebUI]  user '%s' access denied", login)
         app.bottle.redirect("/user/login?error=Invalid user or Password")
 
-    return {'app': app, 'is_auth': is_auth}
+    return {'is_auth': is_authenticated}
 
 
-# manage the /. If the user is known, go to problems page.
+# manage the /. If the user is known, go to home page.
 # Should be /dashboard in the future. If not, go login :)
 def get_root():
     user = app.request.get_cookie("user", secret=app.auth_secret)
     if user:
-        app.bottle.redirect("/problems")
+        app.bottle.redirect("/dashboard")
     elif app.remote_user_enable in ['1', '2']:
         user_name=None
         if app.remote_user_variable in app.request.headers and app.remote_user_enable == '1':
@@ -91,38 +93,23 @@ def get_root():
         elif app.remote_user_variable in app.request.environ and app.remote_user_enable == '2':
             user_name = app.request.environ[app.remote_user_variable]
         if not user_name:
-            print "Warning: You need to have a contact having the same name as your user %s"
+            logger.warning("[WebUI] remote user enabled but no user name found")
             app.bottle.redirect("/user/login")
         c = app.datamgr.get_contact(user_name)
-        print "Got", c
         if not c:
-            print "Warning: You need to have a contact having the same name as your user %s" % user_name
+            logger.warning("Warning: You need to have a contact having the same name as your user %s", user_name)
             app.bottle.redirect("/user/login")
         else:
             app.response.set_cookie('user', user_name, secret=app.auth_secret, path='/')
-            app.bottle.redirect("/problems")
+            app.bottle.redirect("/")
     else:
         app.bottle.redirect("/user/login")
 
 
-def login_mobile():
-    user = app.get_user_auth()
-    if user:
-        app.bottle.redirect("/mobile/main")
-
-    err = app.request.GET.get('error', None)
-    login_text = app.login_text
-
-    return {'error': err, 'login_text': login_text}
-
-pages = {user_login: {'routes': ['/user/login', '/user/login/'],
-                         'view': 'login', 'static': True},
-          user_login_redirect: {'routes': ['/login'], 'static': True},
-          user_auth: {'routes': ['/user/auth'],
-                        'view': 'auth',
-                        'method': 'POST', 'static': True},
-          user_logout: {'routes': ['/user/logout', '/logout'], 'static': True},
-          get_root: {'routes': ['/'], 'static': True},
-          login_mobile: {'routes': ['/mobile', '/mobile/'],
-                    'view': 'login_mobile', 'static': True}
-          }
+pages = { 
+    user_login: {'routes': ['/user/login', '/user/login/'], 'view': 'login', 'static': True},
+    user_login_redirect: {'routes': ['/login'], 'static': True},
+    user_auth: {'routes': ['/user/auth'], 'method': 'POST', 'static': True},
+    user_logout: {'routes': ['/user/logout', '/logout'], 'static': True},
+    get_root: {'routes': ['/'], 'static': True},
+}

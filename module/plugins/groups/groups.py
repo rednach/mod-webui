@@ -7,6 +7,7 @@
 #    Gerhard Lausser, Gerhard.Lausser@consol.de
 #    Gregory Starck, g.starck@gmail.com
 #    Hartmut Goebel, h.goebel@goebel-consult.de
+#    Frederic Mohier, frederic.mohier@gmail.com
 #
 # This file is part of Shinken.
 #
@@ -23,155 +24,79 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 
-### Will be populated by the UI with it's own value
+# Will be populated by the UI with it's own value
 app = None
 
-from shinken.util import safe_print
-from shinken.misc.sorter import hst_srv_sort
 
-# Get plugin's parameters from configuration file
-params = {}
-params['elts_per_page'] = 10
+def show_contactgroups():
+    user = app.request.environ['USER']
+    cgroups = sorted(app.datamgr.get_contactgroups(user), key=lambda cg: cg.contactgroup_name)
 
-def load_cfg():
-    global params
-    
-    import os,sys
-    from shinken.log import logger
-    from webui.config_parser import config_parser
-    plugin_name = os.path.splitext(os.path.basename(__file__))[0]
-    try:
-        currentdir = os.path.dirname(os.path.realpath(__file__))
-        configuration_file = "%s/%s" % (currentdir, 'plugin.cfg')
-        logger.debug("Plugin configuration file: %s" % (configuration_file))
-        scp = config_parser('#', '=')
-        params = scp.parse_config(configuration_file)
+    return {
+        'contactgroups': cgroups,
+        'user': user
+        }
 
-        params['elts_per_page'] = int(params['elts_per_page'])
-        
-        logger.debug("WebUI plugin '%s', configuration loaded." % (plugin_name))
-        logger.debug("Plugin configuration, elts_per_page: %d" % (params['elts_per_page']))
-        
-        return True
-    except Exception, exp:
-        logger.warning("WebUI plugin '%s', configuration file (%s) not available: %s" % (plugin_name, configuration_file, str(exp)))
-        return False
-
-def checkauth():
-    user = app.get_user_auth()
-
-    if not user:
-        app.bottle.redirect("/user/login")
-    else:
-        return user
-
-def reload_cfg():
-    load_cfg()
-    app.bottle.redirect("/hostgroups")
 
 def show_hostgroup(name):
-    user = checkauth()
+    app.bottle.redirect("/all?search=type:host hg:" + name)
 
-    if name == 'all':
-        my_group = 'all'
-        
-        items = []
-        items.extend(app.datamgr.get_hosts())
-
-    else:
-        my_group = app.datamgr.get_hostgroup(name)
-
-        if not my_group:
-            return "Unknown group %s" % name
-            
-        items = my_group.get_hosts()
-
-    elts_per_page = params['elts_per_page']
-    # We want to limit the number of elements
-    start = int(app.request.GET.get('start', '0'))
-    end = int(app.request.GET.get('end', elts_per_page))
-        
-    # Now sort hosts list ..
-    items.sort(hst_srv_sort)
-        
-    # If we overflow, came back as normal
-    total = len(items)
-    if start > total:
-        start = 0
-        end = elts_per_page
-
-    navi = app.helper.get_navi(total, start, step=elts_per_page)
-    items = items[start:end]
-        
-    return {'app': app, 'user': user, 'params': params, 'navi': navi, 'group': my_group, 'hosts': items, 'length': total}
 
 def show_hostgroups():
-    user = checkauth()    
+    user = app.request.environ['USER']
 
-    my_hostgroups = app.datamgr.get_hostgroups()
+    # Set hostgroups level ...
+    # @mohierf: should be done only once for initialization ... to be delegated to datamanager!
+    app.datamgr.set_hostgroups_level(user)
 
-    return {'app': app, 'user': user, 'params': params, 'hgroups': my_hostgroups}
+    level = int(app.request.GET.get('level', 0))
+    parent = app.request.GET.get('parent', None)
+    
+    return {
+        'level': level, 
+        'hostgroups': sorted(app.datamgr.get_hostgroups(parent=parent, user=user), key=lambda hostgroup: hostgroup.hostgroup_name)
+        }
+
+
+def show_hostgroups_dashboard():
+    user = app.request.environ['USER']
+
+    # Set hostgroups level ...
+    app.datamgr.set_hostgroups_level(user)
+
+    level = int(app.request.GET.get('level', 0))
+    parent = app.request.GET.get('parent', None)
+    
+    return {
+        'level': level, 
+        'hostgroups': sorted(app.datamgr.get_hostgroups(parent=parent, user=user), key=lambda hostgroup: hostgroup.hostgroup_name)
+        }
 
 
 def show_servicegroup(name):
-    user = checkauth()    
+    app.bottle.redirect("/all?search=type:service hg:" + name)
 
-    if name == 'all':
-        my_group = 'all'
-        
-        services = []
-        services.extend(app.datamgr.get_services())
-        items = services
-
-    else:
-        my_group = app.datamgr.get_servicegroup(name)
-
-        if not my_group:
-            return "Unknown group %s" % name
-            
-        items = my_group.get_services()
-
-    elts_per_page = params['elts_per_page']
-    # We want to limit the number of elements
-    start = int(app.request.GET.get('start', '0'))
-    end = int(app.request.GET.get('end', elts_per_page))
-        
-    # Now sort services list ..
-    items.sort(hst_srv_sort)
-        
-    # If we overflow, came back as normal
-    total = len(items)
-    if start > total:
-        start = 0
-        end = elts_per_page
-
-    navi = app.helper.get_navi(total, start, step=elts_per_page)
-    items = items[start:end]
-        
-    return {'app': app, 'user': user, 'params': params, 'navi': navi, 'group': my_group, 'services': items, 'length': total}
 
 def show_servicegroups():
-    user = checkauth()    
+    user = app.request.environ['USER']
 
-    my_servicegroups = app.datamgr.get_servicegroups()
+    # Set servicegroups level ...
+    # @mohierf: should be done only once for initialization ... to be delegated to datamanager!
+    app.datamgr.set_servicegroups_level(user)
 
-    return {'app': app, 'user': user, 'params': params, 'sgroups': my_servicegroups}
+    level = int(app.request.GET.get('level', 0))
+    parent = app.request.GET.get('parent', None)
+    
+    return {
+        'level': level, 
+        'servicegroups': sorted(app.datamgr.get_servicegroups(parent=parent, user=user), key=lambda servicegroup: servicegroup.servicegroup_name)
+        }
 
-
-# Load plugin configuration parameters
-load_cfg()
-
-# This is the dict the webui will try to "load".
-#  *here we register one page with both addresses /dummy/:arg1 and /dummy/, both addresses
-#   will call the function get_page.
-#  * we say that for this page, we are using the template file dummy (so view/dummy.tpl)
-#  * we said this page got some static stuffs. So the webui will match /static/dummy/ to
-#    the dummy/htdocs/ directory. Beware: it will take the plugin name to match.
-#  * optional: you can add 'method': 'POST' so this address will be only available for
-#    POST calls. By default it's GET. Look at the lookup module for sample about this.
-pages = {reload_cfg: {'routes': ['/hostgroups/reload','/servicegroups/reload'], 'view': 'hostgroups-overview', 'static': True},
-         show_hostgroup: {'routes': ['/hostgroup/:name'], 'view': 'hostgroup', 'static': True},
-         show_hostgroups: {'routes': ['/hostgroups'], 'view': 'hostgroups-overview', 'static': True},
-         show_servicegroup: {'routes': ['/servicegroup/:name'], 'view': 'servicegroup', 'static': True},
-         show_servicegroups: {'routes': ['/servicegroups'], 'view': 'servicegroups-overview', 'static': True},
-         }
+pages = {
+    show_contactgroups: {'routes': ['/contacts-groups'], 'view': 'contacts-groups-overview', 'static': True},
+    show_hostgroup: {'routes': ['/hosts-group/:name'], 'view': 'hosts-group', 'static': True},
+    show_hostgroups: {'routes': ['/hosts-groups'], 'view': 'hosts-groups-overview', 'static': True},
+    show_hostgroups_dashboard: {'routes': ['/hosts-groups-dashboard'], 'view': 'hosts-groups-dashboard', 'static': True},
+    show_servicegroup: {'routes': ['/services-group/:name'], 'view': 'services-group', 'static': True},
+    show_servicegroups: {'routes': ['/services-groups'], 'view': 'services-groups-overview', 'static': True},
+}
