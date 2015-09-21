@@ -313,9 +313,14 @@ class WebUIDataManager(DataManager):
                 pat = re.compile(s, re.IGNORECASE)
                 new_items = []
                 for i in items:
-                    if pat.search(i.get_full_name()):
+                    if pat.search(i.get_full_name()) or pat.search(i.display_name) or pat.search(i.output):
                         new_items.append(i)
                     else:
+                        for value in i.customs.values():
+                            if pat.search(value):
+                                new_items.append(i)
+                                break
+
                         for j in (i.impacts + i.source_problems):
                             if pat.search(j.get_full_name()):
                                 new_items.append(i)
