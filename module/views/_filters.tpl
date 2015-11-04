@@ -5,7 +5,7 @@
 %search_action = app.request.fullpath
 %search_name = app.request.route.name
 %else:
-%search_action = '/all_'
+%search_action = '/all'
 %search_name = ''
 %end
 
