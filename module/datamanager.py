@@ -448,11 +448,16 @@ class WebUIDataManager(DataManager):
                     items = [i for i in items if i.__class__.my_type == 'host' or (i.in_scheduled_downtime or i.host.in_scheduled_downtime)]
                 elif s.lower() == 'impact':
                     items = [i for i in items if i.is_impact]
+                elif s.lower() == 'probe':
+                    items = [i for i in items if i.customs.get('_PROBE', '0') == '1']
                 else:
                     if len(s) == 1:
                         items = [i for i in items if i.state_id == int(s)]
                     else:
                         items = [i for i in items if i.state == s.upper()]
+
+            if t == 'tech':
+                items = [i for i in items if i.customs.get('_TECH') == s]
 
             if t == 'isnot':
                 if s.lower() == 'ack':
