@@ -278,6 +278,7 @@ class WebUIDataManager(DataManager):
         else:
             return self.get_host(name, user)
 
+
     def search_hosts_and_services(self, search, user, get_impacts=True, sorter=None):
         """ Search hosts and services.
 
@@ -289,6 +290,14 @@ class WebUIDataManager(DataManager):
             :sorter: function to sort the items. default=None (means no sorting)
             :returns: list of hosts and services
         """
+        def _append_host_and_its_services(host):
+            if host not in new_items:
+                new_items.append(host)
+
+            for s in host.get_services():
+                if s not in new_items:
+                    new_items.append(s)
+
         items = []
         items.extend(self.get_hosts(user, get_impacts))
         items.extend(self.get_services(user, get_impacts))
@@ -314,7 +323,13 @@ class WebUIDataManager(DataManager):
                 new_items = []
                 for i in items:
                     if pat.search(i.get_full_name()) or pat.search(i.display_name) or pat.search(i.output):
-                        new_items.append(i)
+                        if i not in new_items:
+                            new_items.append(i)
+
+                        if i.my_type == 'host':
+                            _append_host_and_its_services(i)
+                        else:
+                            _append_host_and_its_services(i.host)
                     else:
                         for value in i.customs.values():
                             if pat.search(value):
