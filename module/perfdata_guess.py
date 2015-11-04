@@ -171,7 +171,7 @@ def manage_unknown_command(elt, metric=None):
     name = metric.name
     value = metric.value
     logger.debug("[WebUI] perfometer, manage command, metric: %s=%d", name, value)
-    if not value:
+    if value is None:
         return None
 
     
