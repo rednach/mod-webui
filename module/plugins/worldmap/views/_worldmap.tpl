@@ -106,7 +106,8 @@
    //------------------------------------------------------------------------------
    mapInit_{{mapId}} = function() {
       if (debugMaps) console.log('mapInit_{{mapId}} ...');
-      if (mapsApiLoading) {
+      //if (mapsApiLoading) {
+      if (window.google) {
          mapsApiLoaded=true;
       }
       if (! mapsApiLoaded) {
