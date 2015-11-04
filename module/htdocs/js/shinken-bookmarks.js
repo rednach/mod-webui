@@ -83,14 +83,14 @@ function refresh_bookmarks(_search_string){
    if (bookmarks.length) {
       $('ul [aria-labelledby="bookmarks_menu"]').append('<li role="presentation" class="dropdown-header"><strong>User bookmarks:</strong></li>');
       $.each(bookmarks, function(idx, bkm){
-         $('ul [aria-labelledby="bookmarks_menu"]').append('<li role="presentation"><a role="menuitem" tabindex="-1" href="/all?search=' + bkm.uri + '"><i class="fa fa-bookmark"></i> ' + bkm.name + '</a></li>');
+         $('ul [aria-labelledby="bookmarks_menu"]').append('<li role="presentation"><a role="menuitem" tabindex="-1" href="?search=' + bkm.uri + '"><i class="fa fa-bookmark"></i> ' + bkm.name + '</a></li>');
          if (bkm_logs) console.debug('Display user bookmark:', bkm.name);
       });
    }
    if (bookmarksro.length) {
       $('ul [aria-labelledby="bookmarks_menu"]').append('<li role="presentation" class="dropdown-header"><strong>Global bookmarks:</strong></li>');
       $.each(bookmarksro, function(idx, bkm){
-         $('ul [aria-labelledby="bookmarks_menu"]').append('<li role="presentation"><a role="menuitem" tabindex="-1" href="/all?search=' + bkm.uri + '"><i class="fa fa-bookmark"></i> ' + bkm.name + '</a></li>');
+         $('ul [aria-labelledby="bookmarks_menu"]').append('<li role="presentation"><a role="menuitem" tabindex="-1" href="?search=' + bkm.uri + '"><i class="fa fa-bookmark"></i> ' + bkm.name + '</a></li>');
          if (bkm_logs) console.debug('Display global bookmark:', bkm.name);
       });
    }
