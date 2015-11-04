@@ -36,7 +36,7 @@ class LogsMetaModule(MetaModule):
     def is_available(self):
         return self.module is not None
 
-    def get_ui_logs(self, elt, logs_type=None, default=None, range_start=None, range_end=None, limit=200):
+    def get_ui_logs(self, elt, logs_type=None, default=[], range_start=None, range_end=None, limit=200):
         if self.is_available():
             return self.module.get_ui_logs(elt, logs_type, range_start, range_end, limit) or default
         return default
