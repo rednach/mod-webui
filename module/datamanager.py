@@ -28,9 +28,11 @@
 import re
 import itertools
 import time
-
+import operator
 
 from shinken.misc.datamanager import DataManager
+
+from shinken.misc.perfdata import PerfDatas
 
 
 # Sort hosts and services by impact, states and co
@@ -458,6 +460,20 @@ class WebUIDataManager(DataManager):
 
             if t == 'tech':
                 items = [i for i in items if i.customs.get('_TECH') == s]
+
+            if t == 'perf':
+                match = re.compile('(?P<attr>[\w_]+)(?P<operator>>=|>|==|<|<=)(?P<value>[\d\.]+)').match(s)
+                operator_str2function = {'>=':operator.ge, '>':operator.gt, '==':operator.eq, '<':operator.lt, '<=':operator.le}
+                oper = operator_str2function[match.group('operator')]
+                new_items = []
+                if match:
+                    for i in items:
+                        if i.process_perf_data:
+                            perf_datas = PerfDatas(i.perf_data)
+                            if match.group('attr') in perf_datas:
+                                if oper(float(perf_datas[match.group('attr')].value), float(match.group('value'))):
+                                    new_items.append(i)
+                items = new_items
 
             if t == 'isnot':
                 if s.lower() == 'ack':
