@@ -25,6 +25,7 @@
 import time
 import requests
 import random
+from shinken.log import logger
 
 
 ### Will be populated by the UI with it's own value
@@ -41,6 +42,7 @@ def proxy_graph():
     try:
         r = requests.get(url)
         if r.status_code != 200:
+            logger.error("[WebUI-graph] Image URL not found: %s", url)
             raise Exception("Image not found")
     except Exception as e:
         app.redirect404(e)
@@ -63,8 +65,8 @@ def get_graphs_widget():
         '365d' : '31536000' ,
     }
 
-    wid = app.request.GET.get('wid', 'widget_graphs_' + str(int(time.time())))
-    collapsed = (app.request.GET.get('collapsed', 'False') == 'True')
+    wid = app.request.query.get('wid', 'widget_graphs_' + str(int(time.time())))
+    collapsed = (app.request.query.get('collapsed', 'False') == 'True')
 
     options = {
         'search': {
@@ -83,7 +85,7 @@ def get_graphs_widget():
     title = 'Element graphs for %s' % search
 
     graphsId = "graphs_%d" % random.randint(1, 9999)
-    
+
     return {
         'elt': elt,
         'wid': wid,
@@ -100,6 +102,10 @@ Show the perfdata graph
 '''
 
 pages = {
-    proxy_graph: {'routes': ['/graph'], 'view': 'graph', 'static': True},
-    get_graphs_widget: {'routes': ['/widget/graphs'], 'view': 'widget_graphs', 'static': True, 'widget': ['dashboard'], 'widget_desc': widget_desc, 'widget_name': 'graphs', 'widget_picture': '/static/graphs/img/widget_graphs.png'},
+    proxy_graph: {
+        'name': 'Graph', 'route': '/graph', 'view': 'graph', 'static': True
+    },
+    get_graphs_widget: {
+        'name': 'wid_Graph', 'route': '/widget/graphs', 'view': 'widget_graphs', 'static': True, 'widget': ['dashboard'], 'widget_desc': widget_desc, 'widget_name': 'graphs', 'widget_picture': '/static/graphs/img/widget_graphs.png'
     }
+}

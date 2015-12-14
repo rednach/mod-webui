@@ -51,9 +51,9 @@ def show_hostgroups():
 
     level = int(app.request.GET.get('level', 0))
     parent = app.request.GET.get('parent', None)
-    
+
     return {
-        'level': level, 
+        'level': level,
         'hostgroups': sorted(app.datamgr.get_hostgroups(parent=parent, user=user), key=lambda hostgroup: hostgroup.hostgroup_name)
         }
 
@@ -66,15 +66,15 @@ def show_hostgroups_dashboard():
 
     level = int(app.request.GET.get('level', 0))
     parent = app.request.GET.get('parent', None)
-    
+
     return {
-        'level': level, 
+        'level': level,
         'hostgroups': sorted(app.datamgr.get_hostgroups(parent=parent, user=user), key=lambda hostgroup: hostgroup.hostgroup_name)
         }
 
 
 def show_servicegroup(name):
-    app.bottle.redirect("/all?search=type:service hg:" + name)
+    app.bottle.redirect("/all?search=type:service sg:" + name)
 
 
 def show_servicegroups():
@@ -86,17 +86,29 @@ def show_servicegroups():
 
     level = int(app.request.GET.get('level', 0))
     parent = app.request.GET.get('parent', None)
-    
+
     return {
-        'level': level, 
+        'level': level,
         'servicegroups': sorted(app.datamgr.get_servicegroups(parent=parent, user=user), key=lambda servicegroup: servicegroup.servicegroup_name)
         }
 
 pages = {
-    show_contactgroups: {'routes': ['/contacts-groups'], 'view': 'contacts-groups-overview', 'static': True},
-    show_hostgroup: {'routes': ['/hosts-group/:name'], 'view': 'hosts-group', 'static': True},
-    show_hostgroups: {'routes': ['/hosts-groups'], 'view': 'hosts-groups-overview', 'static': True},
-    show_hostgroups_dashboard: {'routes': ['/hosts-groups-dashboard'], 'view': 'hosts-groups-dashboard', 'static': True},
-    show_servicegroup: {'routes': ['/services-group/:name'], 'view': 'services-group', 'static': True},
-    show_servicegroups: {'routes': ['/services-groups'], 'view': 'services-groups-overview', 'static': True},
+    show_contactgroups: {
+        'name': 'ContactsGroups', 'route': '/contacts-groups', 'view': 'contacts-groups-overview', 'static': True
+    },
+    show_hostgroup: {
+        'name': 'HostsGroup', 'route': '/hosts-group/:name', 'view': 'hosts-group', 'static': True
+    },
+    show_hostgroups: {
+        'name': 'HostsGroups', 'route': '/hosts-groups', 'view': 'hosts-groups-overview', 'static': True
+    },
+    show_hostgroups_dashboard: {
+        'name': 'HostsGroupsDashboard', 'route': '/hosts-groups-dashboard', 'view': 'hosts-groups-dashboard', 'static': True
+    },
+    show_servicegroup: {
+        'name': 'ServicesGroup', 'route': '/services-group/:name', 'view': 'services-group', 'static': True
+    },
+    show_servicegroups: {
+        'name': 'ServicesGroups', 'route': '/services-groups', 'view': 'services-groups-overview', 'static': True
+    }
 }

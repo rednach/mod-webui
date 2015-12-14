@@ -110,7 +110,8 @@
       if (window.google) {
          mapsApiLoaded=true;
       }
-      if (! mapsApiLoaded) {
+      if (! window.google) {
+      //if (! mapsApiLoaded) {
          console.error('Google Maps API not loaded. Call mapLoad function ...');
          return;
       }
@@ -118,7 +119,7 @@
       var scripts = [];
       // Group markers inside of clusters depending upon map zoom level
       if (! window.MarkerClusterer) scripts.push("/static/worldmap/js/markerclusterer.js");
-      // Allow labels for map markers 
+      // Allow labels for map markers
       if (! window.MarkerWithLabel) scripts.push("/static/worldmap/js/markerwithlabel.js");
       // "Spiderify" close markers : https://github.com/jawj/OverlappingMarkerSpiderfier
       if (! window.OverlappingMarkerSpiderfier) scripts.push("/static/worldmap/js/oms.min.js");
@@ -390,12 +391,12 @@
          if (window.google) {
             if (debugMaps) console.debug("Google maps already loaded ...");
             mapInit_{{mapId}}();
-        } else {
+         } else {
             $.getScript("https://maps.googleapis.com/maps/api/js?sensor=false&callback=mapInit_{{mapId}}", function() {
                mapsApiLoaded=true;
                if (debugMaps) console.log("Google maps API loaded ...");
             });
-        }
+         }
       }, random);
    });
 </script>
