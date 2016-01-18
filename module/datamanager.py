@@ -211,6 +211,10 @@ class WebUIDataManager(DataManager):
         else:
             return None
 
+    def get_host_services(self, hname, user):
+        """ Get host services by its hostname. """
+        return self.search_hosts_and_services('type:service %s' % (hname), user=user)
+
     def get_percentage_hosts_state(self, user, problem=False):
         """ Get percentage of hosts not in (or in) problems.
 
@@ -647,14 +651,18 @@ class WebUIDataManager(DataManager):
     def set_servicegroups_level(self, user):
         # All known hostgroups are level 0 groups ...
         for group in self.get_servicegroups(user=user):
-            self.set_servicegroup_level(group, 0, user)
+            if not hasattr(group, 'level'):
+                self.set_servicegroup_level(group, 0, user)
 
     def set_servicegroup_level(self, group, level, user):
         setattr(group, 'level', level)
 
         for g in sorted(group.get_servicegroup_members()):
-            child_group = self.get_servicegroup(g)
-            self.set_servicegroup_level(child_group, level + 1, user)
+            try:
+                child_group = self.get_servicegroup(g)
+                self.set_servicegroup_level(child_group, level + 1, user)
+            except AttributeError:
+                pass
 
     def get_servicegroups(self, user, parent=None):
         if parent:
