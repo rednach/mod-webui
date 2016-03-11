@@ -298,6 +298,19 @@
             if (debugMaps) console.error('mapInit_{{mapId}}, exception : '+e.message);
          }
 
+         %for p in h.parent_dependencies:
+            var parentLocation = new google.maps.LatLng( {{float(p.customs.get('_LOC_LAT'))}} , {{float(p.customs.get('_LOC_LNG'))}} );
+
+            var son2parent = new google.maps.Polyline({
+               path: [gpsLocation, parentLocation],
+               geodesic: true,
+               strokeColor: 'black',
+               strokeOpacity: 0.5,
+               strokeWeight: 0.8,
+               map: map_{{mapId}}
+            });
+         %end
+
          %end
          %# End all hosts ...
 
