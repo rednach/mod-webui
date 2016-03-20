@@ -28,9 +28,11 @@
 import re
 import itertools
 import time
-
+import operator
 
 from shinken.misc.datamanager import DataManager
+
+from shinken.misc.perfdata import PerfDatas
 
 
 # Sort hosts and services by impact, states and co
@@ -300,6 +302,7 @@ class WebUIDataManager(DataManager):
                 return self.get_contact(name, user)
             return host
 
+
     def search_hosts_and_services(self, search, user, get_impacts=True, sorter=None):
         """ Search hosts and services.
 
@@ -311,6 +314,14 @@ class WebUIDataManager(DataManager):
             :sorter: function to sort the items. default=None (means no sorting)
             :returns: list of hosts and services
         """
+        def _append_host_and_its_services(host):
+            if host not in new_items:
+                new_items.append(host)
+
+            for s in host.get_services():
+                if s not in new_items:
+                    new_items.append(s)
+
         items = []
         items.extend(self.get_hosts(user, get_impacts))
         items.extend(self.get_services(user, get_impacts))
@@ -335,9 +346,20 @@ class WebUIDataManager(DataManager):
                 pat = re.compile(s, re.IGNORECASE)
                 new_items = []
                 for i in items:
-                    if pat.search(i.get_full_name()):
-                        new_items.append(i)
+                    if pat.search(i.get_full_name()) or pat.search(i.display_name) or pat.search(i.output):
+                        if i not in new_items:
+                            new_items.append(i)
+
+                        if i.my_type == 'host':
+                            _append_host_and_its_services(i)
+                        else:
+                            _append_host_and_its_services(i.host)
                     else:
+                        for value in i.customs.values():
+                            if pat.search(value):
+                                new_items.append(i)
+                                break
+
                         for j in (i.impacts + i.source_problems):
                             if pat.search(j.get_full_name()):
                                 new_items.append(i)
@@ -435,6 +457,8 @@ class WebUIDataManager(DataManager):
                     items = [i for i in items if i.__class__.my_type == 'host' or (i.in_scheduled_downtime or i.host.in_scheduled_downtime)]
                 elif s.lower() == 'impact':
                     items = [i for i in items if i.is_impact]
+                elif s.lower() == 'probe':
+                    items = [i for i in items if i.customs.get('_PROBE', '0') == '1']
                 else:
                     # Manage SOFT state
                     if s.startswith('s'):
@@ -448,6 +472,23 @@ class WebUIDataManager(DataManager):
                             items = [i for i in items if i.state_id == int(s) and i.state_type == 'HARD']
                         else:
                             items = [i for i in items if i.state == s.upper() and i.state_type == 'HARD']
+
+            if t == 'tech':
+                items = [i for i in items if i.customs.get('_TECH') == s]
+
+            if t == 'perf':
+                match = re.compile('(?P<attr>[\w_]+)(?P<operator>>=|>|==|<|<=)(?P<value>[\d\.]+)').match(s)
+                operator_str2function = {'>=':operator.ge, '>':operator.gt, '==':operator.eq, '<':operator.lt, '<=':operator.le}
+                oper = operator_str2function[match.group('operator')]
+                new_items = []
+                if match:
+                    for i in items:
+                        if i.process_perf_data:
+                            perf_datas = PerfDatas(i.perf_data)
+                            if match.group('attr') in perf_datas:
+                                if oper(float(perf_datas[match.group('attr')].value), float(match.group('value'))):
+                                    new_items.append(i)
+                items = new_items
 
             if t == 'isnot':
                 if s.lower() == 'ack':
