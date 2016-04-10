@@ -70,10 +70,19 @@ def show_minemap():
 
     # Apply search filter if exists ...
     search = app.request.query.get('search', "type:host")
-    if not "type:host" in search:
-        search = "type:host "+search
+    # if not "type:host" in search:
+    #     search = "type:host "+search
     logger.debug("[WebUI-worldmap] search parameters '%s'", search)
-    items = app.datamgr.search_hosts_and_services(search, user, get_impacts=False)
+    hosts_and_services = app.datamgr.search_hosts_and_services(search, user, get_impacts=False)
+    items = []
+    for x in hosts_and_services:
+        if x.__class__.my_type == 'host':
+            h = x
+        else:
+            h = x.host
+
+        if h not in items:
+            items.append(h)
 
     # Fetch elements per page preference for user, default is 25
     elts_per_page = app.prefs_module.get_ui_user_preference(user, 'elts_per_page', 25)
