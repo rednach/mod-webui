@@ -1132,7 +1132,7 @@ Invalid element name
                            %perfdatas = PerfDatas(s.perf_data)
                            %if perfdatas:
                            %for metric in sorted(perfdatas, key=lambda metric: metric.name):
-                           %if metric.name and metric.value:
+                           %if metric.name and metric.value is not None:
                            <tr>
                               <td>{{!helper.get_link(s, short=True) if service_line else ''}}</td>
                               %service_line = False
