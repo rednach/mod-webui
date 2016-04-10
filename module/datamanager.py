@@ -327,6 +327,7 @@ class WebUIDataManager(DataManager):
         items.extend(self.get_services(user, get_impacts))
 
         search = [s for s in search.split(' ')]
+        filtered_by_type = False
 
         for s in search:
             s = s.strip()
@@ -347,13 +348,14 @@ class WebUIDataManager(DataManager):
                 new_items = []
                 for i in items:
                     if pat.search(i.get_full_name()) or pat.search(i.display_name) or pat.search(i.output):
-                        if i not in new_items:
-                            new_items.append(i)
-
-                        if i.my_type == 'host':
-                            _append_host_and_its_services(i)
+                        if filtered_by_type:
+                            if i not in new_items:
+                                new_items.append(i)
                         else:
-                            _append_host_and_its_services(i.host)
+                            if i.my_type == 'host':
+                                _append_host_and_its_services(i)
+                            else:
+                                _append_host_and_its_services(i.host)
                     else:
                         for value in i.customs.values():
                             if pat.search(value):
@@ -411,6 +413,7 @@ class WebUIDataManager(DataManager):
                 items = list(set(itertools.chain(*[self._only_related_to(items, c) for c in contacts])))
 
             if t == 'type' and s.lower() != 'all':
+                filtered_by_type = True
                 items = [i for i in items if i.__class__.my_type == s]
 
             if t == 'bp' or t == 'bi':
