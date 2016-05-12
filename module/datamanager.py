@@ -323,6 +323,15 @@ class WebUIDataManager(DataManager):
                 if s not in new_items:
                     new_items.append(s)
 
+        def _filter_item(item):
+            if pat.search(i.get_full_name()) or pat.search(i.output):
+                return True
+            for v in i.customs.values():
+                if pat.search(v):
+                    return True
+            return False
+
+
         items = []
         items.extend(self.get_hosts(user, get_impacts))
         items.extend(self.get_services(user, get_impacts))
@@ -348,7 +357,7 @@ class WebUIDataManager(DataManager):
                 pat = re.compile(s, re.IGNORECASE)
                 new_items = []
                 for i in items:
-                    if pat.search(i.get_full_name()) or pat.search(i.display_name) or pat.search(i.output):
+                    if _filter_item(i):
                         if filtered_by_type:
                             if i not in new_items:
                                 new_items.append(i)
