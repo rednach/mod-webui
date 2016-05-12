@@ -62,7 +62,7 @@
                </td>
                <td>
                   %if i == 0:
-                  <a href="/host/{{pb.host_name}}">{{pb.display_name}}</a>
+                  <a href="/host/{{pb.host_name}}">{{pb.customs.get('_DISPLAY_NAME') or pb.host_name}}</a>
                   %end
                </td>
                <td>
