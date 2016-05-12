@@ -657,6 +657,8 @@ class WebUIDataManager(DataManager):
                     items = [i for i in items if i.__class__.my_type == 'host' or (i.in_scheduled_downtime or i.host.in_scheduled_downtime)]
                 elif s.lower() == 'impact':
                     items = [i for i in items if i.is_impact]
+                elif s.lower() == 'probe':
+                    items = [i for i in items if i.customs.get('_PROBE', '0') == '1']
                 else:
                     # Manage SOFT state
                     if s.startswith('s'):
