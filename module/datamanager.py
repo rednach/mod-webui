@@ -314,6 +314,7 @@ class WebUIDataManager(DataManager):
             :sorter: function to sort the items. default=None (means no sorting)
             :returns: list of hosts and services
         """
+
         def _append_host_and_its_services(host):
             if host not in new_items:
                 new_items.append(host)
@@ -755,7 +756,7 @@ class WebUIDataManager(DataManager):
     ##
     def get_overall_state(self, user):
         ''' Get the worst state of all business impacting elements. '''
-        impacts = self.get_impacts(user, sorter=worse_first)
+        impacts = self.get_impacts(user, search='is:impact bi:>=0 type:all isnot:ACK isnot:DOWNTIME', sorter=worse_first)
         if impacts:
             return impacts[0].state_id
         else:
