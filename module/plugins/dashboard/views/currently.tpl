@@ -418,7 +418,7 @@
                <div>
                   %overall_state = app.datamgr.get_overall_state(user)
                   %font='unknown' if overall_state >= 3 else 'critical' if overall_state >= 2 else 'warning' if overall_state >= 1 else 'ok'
-                  <span title="Number of impacts." class="badger-big font-{{font}}">{{len(app.datamgr.get_impacts(user))}}</span>
+                  <span title="Number of impacts." class="badger-big font-{{font}}">{{len(app.datamgr.get_impacts(user, search='is:impact bi:>=0 type:all isnot:ACK isnot:DOWNTIME'))}}</span>
                </div>
 
                <i class="fa fa-5x fa-flash"></i>
