@@ -37,14 +37,15 @@ Invalid element name
 %breadcrumb += [[elt_service.display_name, '/service/'+elt_name] ]
 %end
 
-%js=['availability/js/justgage.js', 'availability/js/raphael.2.1.0.min.js', 'cv_host/js/flot/jquery.flot.min.js', 'cv_host/js/flot/jquery.flot.tickrotor.js', 'cv_host/js/flot/jquery.flot.resize.min.js', 'cv_host/js/flot/jquery.flot.pie.min.js', 'cv_host/js/flot/jquery.flot.categories.min.js', 'cv_host/js/flot/jquery.flot.time.min.js', 'cv_host/js/flot/jquery.flot.stack.min.js', 'cv_host/js/flot/jquery.flot.valuelabels.js',  'eltdetail/js/jquery.color.js', 'eltdetail/js/bootstrap-switch.min.js', 'eltdetail/js/custom_views.js', 'eltdetail/js/eltdetail.js']
+%js=['availability/js/justgage.js', 'availability/js/raphael-2.1.4.min.js', 'cv_host/js/flot/jquery.flot.min.js', 'cv_host/js/flot/jquery.flot.tickrotor.js', 'cv_host/js/flot/jquery.flot.resize.min.js', 'cv_host/js/flot/jquery.flot.pie.min.js', 'cv_host/js/flot/jquery.flot.categories.min.js', 'cv_host/js/flot/jquery.flot.time.min.js', 'cv_host/js/flot/jquery.flot.stack.min.js', 'cv_host/js/flot/jquery.flot.valuelabels.js',  'eltdetail/js/jquery.color.js', 'eltdetail/js/bootstrap-switch.min.js', 'eltdetail/js/custom_views.js', 'eltdetail/js/eltdetail.js']
 %css=['eltdetail/css/bootstrap-switch.min.css', 'eltdetail/css/eltdetail.css', 'cv_host/css/cv_host.css']
 %rebase("layout", js=js, css=css, breadcrumb=breadcrumb, title=title)
 
 <div id="element" class="row container-fluid">
 
-   %groups=elt_service.servicegroups if elt_service else elt_host.hostgroups
-   %tags=elt_service.get_service_tags() if elt_service else elt_host.get_host_tags()
+   %groups = elt_service.servicegroups if elt_service else elt_host.hostgroups
+   %groups = sorted(groups, key=lambda x:x.level)
+   %tags = elt_service.get_service_tags() if elt_service else elt_host.get_host_tags()
 
 
    <!-- First row : tags and actions ... -->
@@ -57,7 +58,7 @@ Invalid element name
          <ul class="dropdown-menu pull-right">
          %for g in groups:
             <li>
-            <a href="/{{elt_type}}s-group/{{g.get_name()}}">{{g.alias if g.alias else g.get_name()}}</a>
+            <a href="/{{elt_type}}s-group/{{g.get_name()}}">{{g.level if g.level else '0'}} - {{g.alias if g.alias else g.get_name()}}</a>
             </li>
          %end
          </ul>
@@ -266,7 +267,7 @@ Invalid element name
    %end
 
    %if elt_type=='host':
-   %synthesis = helper.get_synthesis(elt.services)
+   %synthesis = app.datamgr.get_synthesis(elt.services)
    %s = synthesis['services']
    <div class="panel panel-default">
      <div class="panel-body">
@@ -315,7 +316,7 @@ Invalid element name
 
             <li class="{{_go_active}}"><a href="#information" data-toggle="tab">Information</a></li>
             <li><a href="#impacts" data-toggle="tab">{{'Services' if elt_type == 'host' else 'Impacts'}}</a></li>
-            %if elt.customs:
+            %if user.is_administrator() and elt.customs:
             <li><a href="#configuration" data-toggle="tab">Configuration</a></li>
             %end
             <li><a href="#comments" data-toggle="tab">Comments</a></li>
@@ -517,11 +518,11 @@ Invalid element name
                               %if (elt.active_checks_enabled):
                               <tr>
                                  <td><strong>Check interval:</strong></td>
-                                 <td>{{elt.check_interval}} minutes</td>
+                                 <td>{{elt.check_interval}} seconds</td>
                               </tr>
                               <tr>
                                  <td><strong>Retry interval:</strong></td>
-                                 <td>{{elt.retry_interval}} minutes</td>
+                                 <td>{{elt.retry_interval}} seconds</td>
                               </tr>
                               <tr>
                                  <td><strong>Max check attempts:</strong></td>
@@ -724,7 +725,7 @@ Invalid element name
                               <tr>
                                  <td><strong>Contacts:</strong></td>
                                  <td>
-                                   %contacts = [c for c in elt.contacts if app.datamgr.get_contact(c.contact_name, user)]
+                                   %contacts = [c for c in elt.contacts if app.datamgr.get_contact(name=c.contact_name, user=user)]
                                    %for c in contacts:
                                    <a href="/contact/{{c.contact_name}}">{{ c.alias if c.alias and c.alias != 'none' else c.contact_name }}</a>,
                                    %end
@@ -809,7 +810,7 @@ Invalid element name
             <!-- Tab Impacts end -->
 
            <!-- Tab Configuration start -->
-            %if elt.customs:
+            %if user.is_administrator() and elt.customs:
             <div class="tab-pane fade" id="configuration">
                <div class="panel panel-default">
                   <div class="panel-body">
@@ -834,7 +835,11 @@ Invalid element name
                            <tr>
                               <td>{{var}}</td>
                               <td>{{elt.customs[var]}}</td>
-                              %if app.can_action():
+                              %# ************
+                              %# Remove the Change button because Shinken does not take care of the external command!
+                              %# Issue #224
+                              %# ************
+                              %if app.can_action() and False:
                               <td>
                                  <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm"
                                        data-type="action" action="change-variable"

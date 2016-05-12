@@ -14,7 +14,7 @@
    %if not pbs:
    <center>
      %if search_string:
-     <h3>Bummer, we couldn't find anything.</h3>
+     <h3>What a bummer! We couldn't find anything.</h3>
      Use the filters or the bookmarks to find what you are looking for, or try a new search query.
      %else:
      <h3>No host or service.</h3>
@@ -22,7 +22,7 @@
    </center>
    %else:
 
-   %include("_problems_synthesis.tpl", pbs=pbs)
+   %include("_problems_synthesis.tpl", pbs=pbs, search_string=app.get_search_string())
 
    %from itertools import groupby
    %pbs = sorted(pbs, key=lambda x: x.business_impact, reverse=True)
@@ -57,12 +57,32 @@
                <td>
                   <input type="checkbox" class="input-sm" value="" id="selector-{{helper.get_html_id(pb)}}" data-type="problem" data-business-impact="{{business_impact}}" data-item="{{pb.get_full_name()}}">
                </td>
-               <td align="center">
-                  {{!helper.get_fa_icon_state(pb)}}
+               <td title="{{pb.get_name()}} - {{pb.output}} - Since {{helper.print_duration(pb.last_state_change)}} - Last check: {{helper.print_duration(pb.last_chk)}}" class="align-center">
+                  {{!helper.get_fa_icon_state(pb, useTitle=False)}}
                </td>
                <td>
                   %if i == 0:
-                  <a href="/host/{{pb.host_name}}">{{pb.customs.get('_DISPLAY_NAME') or pb.host_name}}</a>
+                     %title = ''
+                     %if pb.__class__.my_type == 'service':
+                        %groups = sorted(pb.host.hostgroups, key=lambda x:x.level, reverse=True)
+                        %group = groups[0] if groups else None
+                        %title = 'Member of %s' % (group.alias if group.alias else group.get_name()) if group else ''
+                     %else:
+                        %groups = sorted(pb.hostgroups, key=lambda x:x.level, reverse=True)
+                        %group = groups[0] if groups else None
+                        %title = 'Member of %s' % (group.alias if group.alias else group.get_name()) if group else ''
+                     %end
+                     <a href="/host/{{pb.customs.get('_DISPLAY_NAME') or pb.host_name}}" title="{{title}}">
+                     %if pb.__class__.my_type == 'service':
+                        %if pb.host:
+                        {{pb.host.get_name() if pb.host.display_name == '' else pb.host.display_name}}
+                        %else:
+                        {{pb.host_name}}
+                        %end
+                     %else:
+                        {{pb.get_name() if pb.display_name == '' else pb.display_name}}
+                     %end
+                     </a>
                   %end
                </td>
                <td>
@@ -81,12 +101,14 @@
                <td class="row hidden-sm hidden-xs">
                   %if app.graphs_module.is_available():
                   <div class="pull-right">
-                     %# Graphs
-                     %import time
-                     %now = time.time()
                      %graphs = app.graphs_module.get_graph_uris(pb, duration=12*3600)
                      %if len(graphs) > 0:
-                        <a role="button" tabindex="0" data-toggle="popover" title="{{ pb.get_full_name() }}" data-html="true" data-content="<img src='{{ graphs[0]['img_src'] }}' width='600px' height='200px'>" data-trigger="hover" data-placement="left">{{!helper.get_perfometer(pb)}}</a>
+                        <a style="text-decoration: none;" role="button" tabindex="0" data-toggle="popover"
+                           title="{{ pb.get_full_name() }}" data-html="true"
+                           data-content="<img src='{{ graphs[0]['img_src'] }}' width='600px' height='200px'>"
+                           data-trigger="hover" data-placement="left">
+                           {{!helper.get_perfometer(pb)}}
+                        </a>
                      %end
                   </div>
                   %end

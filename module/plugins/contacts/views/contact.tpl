@@ -4,18 +4,15 @@
 %# If got no element, bailout
 %if not contact:
 %rebase("layout", title='Invalid contact name')
-
-%else:
+%end
 
 %helper = app.helper
 
 %username = 'anonymous'
-%if user is not None:
-%if hasattr(contact, 'alias'):
+%if hasattr(contact, 'alias') and contact.alias != 'none':
 %username = contact.alias
 %else:
-%username = contact.get_name()
-%end
+%username = contact.contact_name
 %end
 
 %rebase("layout", title='Contact ' + username, breadcrumb=[ ['All contacts', '/contacts'], [username, '/contact/'+username] ])
@@ -95,6 +92,11 @@
                         %for dt in sorted(contact.downtimes, key=lambda dt: dt.entry_time, reverse=True):
                            <tr>
                               <td>{{dt.author}}</td>
+                           </tr>
+                        %end
+                        %for dt in sorted(contact.downtimes, key=lambda dt: dt.entry_time, reverse=True):
+                           <tr>
+                              <td>{{dt.author}}</td>
                               <td>{{dt.comment}}</td>
                               <td>{{helper.print_date(dt.start_time)}} - {{helper.print_date(dt.end_time)}}</td>
                               <td>
@@ -112,6 +114,7 @@
                </table>
                %end
 
+               <!--
                <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm"
                        data-type="action" action="schedule-downtime"
                        data-toggle="tooltip" data-placement="bottom" title="Schedule a downtime for this contact"
@@ -128,6 +131,7 @@
                     <i class="fa fa-minus"></i> Delete all downtimes
                </button>
                %end
+               -->
 
                <table class="table table-condensed col-sm-12" style="table-layout: fixed; word-wrap: break-word;">
                   <colgroup>
@@ -370,7 +374,40 @@
                   %# For notificationways ...
                   </tbody>
                </table>
-            
+
+               %if contact.customs:
+               <table class="table table-condensed col-sm-12" style="table-layout: fixed; word-wrap: break-word;">
+                  <colgroup>
+                     <col style="width: 30%" />
+                     <col style="width: 70%" />
+                  </colgroup>
+                  <thead>
+                     <tr>
+                        <th colspan="2">Customs:</td>
+                     </tr>
+                  </thead>
+                  <tbody style="font-size:x-small;">
+                        %for var in sorted(contact.customs):
+                           <tr>
+                              <td>{{var}}</td>
+                              <td>{{contact.customs[var]}}</td>
+                              %if app.can_action():
+                              <td>
+                                 <button class="{{'disabled' if not app.can_action() else ''}} btn btn-primary btn-sm"
+                                       data-type="action" action="change-variable"
+                                       data-toggle="tooltip" data-placement="bottom" title="Change a custom variable for this {{elt_type}}"
+                                       data-element="{{helper.get_uri_name(contact)}}" data-variable="{{var}}" data-value="{{contact.customs[var]}}"
+                                       >
+                                    <i class="fa fa-gears"></i> Change
+                                 </button>
+                              </td>
+                              %end
+                           </tr>
+                        %end
+                  </tbody>
+               </table>
+               %end
+
                <table class="table table-condensed col-sm-12" style="table-layout: fixed; word-wrap: break-word;">
                   <colgroup>
                      <col style="width: 30%" />
@@ -417,7 +454,7 @@
                         <td>
                         %i=1
                         %for item in my_contactgroups:
-                          {{', ' if i!=1 else ''}}{{item.alias if item.alias!='' else item.get_name()}}
+                          {{', ' if i!=1 else ''}}<a href="/all?search=cg:{{item.get_name()}}">{{item.alias if item.alias!='' else item.get_name()}}</a>
                           %i+=1
                           %if i > 20:
                           <span> ... </span>
@@ -434,4 +471,3 @@
       </div>
    </div>
 </div>
-%end

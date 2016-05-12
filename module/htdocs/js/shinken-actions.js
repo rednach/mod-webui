@@ -30,6 +30,60 @@ function capitalize (text) {
 }
 
 
+/**
+ * Get current user preference value:
+ * - key
+ * - callback function called after data are posted
+**/
+function get_user_preference(key, callback) {
+
+   $.get("/user/get_pref", { 'key' : key }, function( data, textStatus, jqXHR ) {
+      if (actions_logs) console.debug('Got: '+key, data, textStatus);
+
+      if (typeof callback !== 'undefined' && $.isFunction(callback)) {
+         if (actions_logs) console.debug('Calling callback function ...', callback);
+         callback(JSON.parse(data));
+      }
+   });
+}
+
+/**
+ * Save current user preference value:
+ * - key / value
+ * - callback function called after data are posted
+**/
+function save_user_preference(key, value, callback) {
+
+   $.get("/user/save_pref", { 'key' : key, 'value' : value }, function() {
+      if (actions_logs) console.debug('User preference saved: ', key, value);
+      // raise_message_ok("User parameter saved");
+
+      if (typeof callback !== 'undefined' && $.isFunction(callback)) {
+         if (actions_logs) console.debug('Calling callback function ...', callback);
+         callback(JSON.parse(value));
+      }
+   });
+}
+
+/**
+ * Save common preference value
+ * - key / value
+ * - callback function called after data are posted
+**/
+function save_common_preference(key, value, callback) {
+
+   $.get("/user/save_common_pref", { 'key' : key, 'value' : value}, function() {
+      if (actions_logs) console.debug('Common preference saved: ', key, value);
+      // raise_message_ok("Common parameter saved");
+
+      if (typeof callback !== 'undefined' && $.isFunction(callback)) {
+         if (actions_logs) console.debug('Calling callback function ...', callback);
+         callback(JSON.parse(value));
+      }
+   });
+}
+
+
 /*
  * Launch the request
  */
@@ -209,51 +263,60 @@ function recheck_now(name) {
  * See #226
  */
 function toggle_active_checks(name, b){
+   var elts = get_elements(name);
+
    if (actions_logs) console.debug("Toggle active checks for: ", name, ", currently: ", b)
 
-   var elts = get_elements(name);
-   // Inverse the active check or not for the element
-   if (b) { // go disable
-      disable_checks(elts, false);
-   } else { // Go enable, passive too
-      enable_checks(elts, false);
+   if (b) {
+      var url = '/action/DISABLE_' + elts.type + '_CHECK/' + elts.nameslash;
+      launch(url, 'Active checks disabled');
+   } else {
+      var url = '/action/ENABLE_' + elts.type + '_CHECK/' + elts.nameslash;
+      launch(url, 'Active checks enabled');
    }
 }
 function toggle_passive_checks(name, b){
+   var elts = get_elements(name);
+
    if (actions_logs) console.debug("Toggle passive checks for: ", name, ", currently: ", b)
 
-   var elts = get_elements(name);
-   // Inverse the passive check or not for the element
    if (b) {
-      disable_checks(elts, true);
+      var url = '/action/DISABLE_PASSIVE_' + elts.type + '_CHECKS/' + elts.nameslash;
+      launch(url, 'Passive checks disabled');
    } else {
-      enable_checks(elts, true);
-   }
-}
-function enable_checks(elts, passive_too){
-   var url = '/action/ENABLE_'+elts.type+'_CHECK/'+elts.nameslash;
-   launch(url, 'Active checks enabled');
-   if (passive_too){
-      var url = '/action/ENABLE_PASSIVE_'+elts.type+'_CHECKS/'+elts.nameslash;
+      var url = '/action/ENABLE_PASSIVE_' + elts.type + '_CHECKS/' + elts.nameslash;
       launch(url, 'Passive checks enabled');
    }
-   // Enable host services only if it's an host ;)
-   if (elts.type == 'HOST'){
-      var url = '/action/ENABLE_HOST_SVC_CHECKS/'+elts.nameslash;
-      launch(url, 'Host services checks enabled');
+}
+function toggle_host_checks(name, b){
+   var elts = get_elements(name);
+
+   if (elts.type == 'HOST') {
+      if (actions_logs) console.debug("Toggle host checks for: ", name, ", currently: ", b);
+
+      if (b) {
+          var url = '/action/DISABLE_HOST_SVC_CHECKS/' + elts.nameslash;
+          launch(url, 'Host services checks disabled');
+      } else {
+          var url = '/action/ENABLE_HOST_SVC_CHECKS/' + elts.nameslash;
+          launch(url, 'Host services checks enabled');
+      }
    }
 }
-function disable_checks(elts, passive_too){
-   var url = '/action/DISABLE_'+elts.type+'_CHECK/'+elts.nameslash;
-   launch(url, 'Active checks disabled');
-   if (passive_too){
-      var url = '/action/DISABLE_PASSIVE_'+elts.type+'_CHECKS/'+elts.nameslash;
-      launch(url, 'Passive checks disabled');
-   }
-   // Disable host services only if it's an host ;)
-   if (elts.type == 'HOST'){
-      var url = '/action/DISABLE_HOST_SVC_CHECKS/'+elts.nameslash;
-      launch(url, 'Host services checks disabled');
+
+
+/*
+ * Enable/disable all notifications
+ */
+function toggle_all_notifications(b){
+   if (actions_logs) console.debug("Toggle all notifications, currently: ", b)
+
+   if (b) {
+      var url = '/action/DISABLE_NOTIFICATIONS';
+      launch(url, 'All notifications disabled');
+   } else {
+      var url = '/action/ENABLE_NOTIFICATIONS'
+      launch(url, 'All notifications enabled');
    }
 }
 
@@ -372,10 +435,7 @@ function delete_all_comments(name) {
  Set the "trigger_id" argument to zero (0) if the downtime for the
  specified host should not be triggered by another downtime entry.
 */
-var shinken_downtime_fixed='1';
-var shinken_downtime_trigger='0';
-var shinken_downtime_duration='0';
-function do_schedule_downtime(name, start_time, end_time, user, comment, contact){
+function do_schedule_downtime(name, start_time, end_time, user, comment, contact, shinken_downtime_fixed, shinken_downtime_trigger, shinken_downtime_duration){
    var elts = get_elements(name, contact);
    var url = '/action/SCHEDULE_'+elts.type+'_DOWNTIME/'+elts.nameslash+'/'+start_time+'/'+end_time+'/'+shinken_downtime_fixed+'/'+shinken_downtime_trigger+'/'+shinken_downtime_duration+'/'+user+'/'+comment;
    launch(url, capitalize(elts.type)+': '+name+', downtime scheduled');
@@ -413,13 +473,10 @@ are disabled.
  If the "notify" option is set to one (1), a notification will be sent out to
  contacts indicating that the current host problem has been acknowledged.
  If the "persistent" option is set to one (1), the comment associated with the
- acknowledgement will survive across restarts of the Nagios process.
- If not, the comment will be deleted the next time Nagios restarts.
+ acknowledgement will survive across restarts of the Shinken process.
+ If not, the comment will be deleted the next time Shinken restarts.
 */
-var shinken_acknowledge_sticky='2';
-var shinken_acknowledge_notify='1';
-var shinken_acknowledge_persistent='1';
-function do_acknowledge(name, text, user){
+function do_acknowledge(name, text, user, shinken_acknowledge_sticky, shinken_acknowledge_notify, shinken_acknowledge_persistent){
    var elts = get_elements(name);
    var url = '/action/ACKNOWLEDGE_'+elts.type+'_PROBLEM/'+elts.nameslash+'/'+shinken_acknowledge_sticky+'/'+shinken_acknowledge_notify+'/'+shinken_acknowledge_persistent+'/'+user+'/'+text;
    launch(url, capitalize(elts.type)+': '+name+', acknowledged');
