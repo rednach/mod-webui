@@ -30,7 +30,6 @@ import json
 import itertools
 import time
 import operator
-
 from shinken.log import logger
 
 from shinken.misc.datamanager import DataManager
@@ -46,8 +45,6 @@ from shinken.objects.contactgroup import Contactgroup, Contactgroups
 from shinken.objects.notificationway import NotificationWay, NotificationWays
 from shinken.objects.timeperiod import Timeperiod, Timeperiods
 from shinken.objects.command import Command, Commands
-
-from shinken.misc.perfdata import PerfDatas
 
 
 # Sort hosts and services by impact, states and co
@@ -400,6 +397,7 @@ class WebUIDataManager(DataManager):
             :sorter: function to sort the items. default=None (means no sorting)
             :returns: list of hosts and services
         """
+
         def _append_host_and_its_services(host):
             if host not in new_items:
                 new_items.append(host)
@@ -408,6 +406,7 @@ class WebUIDataManager(DataManager):
                 if s not in new_items:
                     new_items.append(s)
 
+
         def _filter_item(item):
             if pat.search(i.get_full_name()) or pat.search(i.output):
                 return True
@@ -415,14 +414,6 @@ class WebUIDataManager(DataManager):
                 if pat.search(v):
                     return True
             return False
-
-
-        items = []
-        items.extend(self.get_hosts(user, get_impacts))
-        items.extend(self.get_services(user, get_impacts))
-
-        search = [s for s in search.split(' ')]
-        filtered_by_type = False
 
         # Make user an User object ... simple protection.
         if isinstance(user, basestring):
@@ -480,6 +471,7 @@ class WebUIDataManager(DataManager):
             re.VERBOSE
             )
 
+        filtered_by_type = False
         patterns = []
         for match in regex.finditer(search):
             if match.group('name'):
@@ -507,11 +499,6 @@ class WebUIDataManager(DataManager):
                             else:
                                 _append_host_and_its_services(i.host)
                     else:
-                        for value in i.customs.values():
-                            if pat.search(value):
-                                new_items.append(i)
-                                break
-
                         for j in (i.impacts + i.source_problems):
                             if pat.search(j.get_full_name()):
                                 new_items.append(i)
@@ -670,8 +657,6 @@ class WebUIDataManager(DataManager):
                     items = [i for i in items if i.__class__.my_type == 'host' or (i.in_scheduled_downtime or i.host.in_scheduled_downtime)]
                 elif s.lower() == 'impact':
                     items = [i for i in items if i.is_impact]
-                elif s.lower() == 'probe':
-                    items = [i for i in items if i.customs.get('_PROBE', '0') == '1']
                 else:
                     # Manage SOFT state
                     if s.startswith('s'):
@@ -685,23 +670,6 @@ class WebUIDataManager(DataManager):
                             items = [i for i in items if i.state_id == int(s) and i.state_type == 'HARD']
                         else:
                             items = [i for i in items if i.state == s.upper() and i.state_type == 'HARD']
-
-            if t == 'tech':
-                items = [i for i in items if i.customs.get('_TECH') == s]
-
-            if t == 'perf':
-                match = re.compile('(?P<attr>[\w_]+)(?P<operator>>=|>|==|<|<=)(?P<value>[\d\.]+)').match(s)
-                operator_str2function = {'>=':operator.ge, '>':operator.gt, '==':operator.eq, '<':operator.lt, '<=':operator.le}
-                oper = operator_str2function[match.group('operator')]
-                new_items = []
-                if match:
-                    for i in items:
-                        if i.process_perf_data:
-                            perf_datas = PerfDatas(i.perf_data)
-                            if match.group('attr') in perf_datas:
-                                if oper(float(perf_datas[match.group('attr')].value), float(match.group('value'))):
-                                    new_items.append(i)
-                items = new_items
 
             if t == 'isnot':
                 if s.lower() == 'ack':
@@ -725,6 +693,23 @@ class WebUIDataManager(DataManager):
                             items = [i for i in items if i.state_id != int(s) and i.state_type == 'HARD']
                         else:
                             items = [i for i in items if i.state != s.upper() and i.state_type == 'HARD']
+
+            if t == 'tech':
+                items = [i for i in items if i.customs.get('_TECH') == s]
+
+            if t == 'perf':
+                match = re.compile('(?P<attr>[\w_]+)(?P<operator>>=|>|==|<|<=)(?P<value>[\d\.]+)').match(s)
+                operator_str2function = {'>=':operator.ge, '>':operator.gt, '==':operator.eq, '<':operator.lt, '<=':operator.le}
+                oper = operator_str2function[match.group('operator')]
+                new_items = []
+                if match:
+                    for i in items:
+                        if i.process_perf_data:
+                            perf_datas = PerfDatas(i.perf_data)
+                            if match.group('attr') in perf_datas:
+                                if oper(float(perf_datas[match.group('attr')].value), float(match.group('value'))):
+                                    new_items.append(i)
+                items = new_items
 
             # :COMMENT:maethor:150616: Legacy filters, kept for bookmarks compatibility
             if t == 'ack':
@@ -1235,7 +1220,7 @@ class WebUIDataManager(DataManager):
     ##
     def get_overall_state(self, user):
         ''' Get the worst state of all business impacting elements. '''
-        impacts = self.get_impacts(user, search='is:impact bi:>=0 type:all isnot:ACK isnot:DOWNTIME', sorter=worse_first)
+        impacts = self.get_impacts(user, sorter=worse_first)
         if impacts:
             return impacts[0].state_id
         else:
