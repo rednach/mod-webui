@@ -46,6 +46,8 @@ from shinken.objects.notificationway import NotificationWay, NotificationWays
 from shinken.objects.timeperiod import Timeperiod, Timeperiods
 from shinken.objects.command import Command, Commands
 
+from shinken.misc.perfdata import PerfDatas
+
 
 # Sort hosts and services by impact, states and co
 def hst_srv_sort(s1, s2):
