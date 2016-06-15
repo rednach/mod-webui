@@ -73,7 +73,7 @@
                         %group = groups[0] if groups else None
                         %title = 'Member of %s' % (group.alias if group.alias else group.get_name()) if group else ''
                      %end
-                     <a href="/host/{{pb.customs.get('_DISPLAY_NAME') or pb.host_name}}" title="{{title}}">
+                     <a href="/host/{{pb.host_name}}" title="{{title}}">
                      %if pb.__class__.my_type == 'service':
                         %if pb.host:
                         {{pb.host.get_name() if pb.host.display_name == '' else pb.host.display_name}}
