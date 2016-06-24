@@ -102,7 +102,7 @@ class User(Contact):
 
         # is it me as a Contact object ?
         if item.__class__.my_type == 'contact':
-            return item.name == self.name
+            return item.contact_name == self.contact_name
 
         # Am I member of the contacts group?
         if item.__class__.my_type == 'contactgroup':
