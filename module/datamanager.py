@@ -400,15 +400,30 @@ class WebUIDataManager(DataManager):
             :returns: list of hosts and services
         """
 
-        def _append_host_and_its_services(host):
-            if host not in new_items:
-                new_items.append(host)
 
-            for s in host.get_services():
-                if s not in new_items:
-                    new_items.append(s)
+        def _append_based_on_filtered_by_type(new_items, i, filtered_by_type):
 
+            def _append_host_and_its_services(new_items, i):
+                    def _doit(new_items, host):
+                        if host not in new_items:
+                            new_items.append(host)
 
+                            for s in host.get_services():
+                                if s not in new_items:
+                                    new_items.append(s)
+
+                    if i.my_type == 'host':
+                        _doit(new_items, i)
+                    elif i.my_type == 'service':
+                        _doit(new_items, i.host)
+
+            if filtered_by_type:
+                if i not in new_items:
+                    new_items.append(i)
+            else:
+                _append_host_and_its_services(new_items, i)
+
+    
         def _filter_item(item):
             if pat.search(i.get_full_name()) or pat.search(i.output):
                 return True
@@ -492,14 +507,7 @@ class WebUIDataManager(DataManager):
                 new_items = []
                 for i in items:
                     if _filter_item(i):
-                        if filtered_by_type:
-                            if i not in new_items:
-                                new_items.append(i)
-                        else:
-                            if i.my_type == 'host':
-                                _append_host_and_its_services(i)
-                            else:
-                                _append_host_and_its_services(i.host)
+                        _append_based_on_filtered_by_type(new_items, i, filtered_by_type)
                     else:
                         for j in (i.impacts + i.source_problems):
                             if pat.search(j.get_full_name()):
@@ -712,7 +720,22 @@ class WebUIDataManager(DataManager):
                             perf_datas = PerfDatas(i.perf_data)
                             if match.group('attr') in perf_datas:
                                 if oper(float(perf_datas[match.group('attr')].value), float(match.group('value'))):
-                                    new_items.append(i)
+                                    # new_items.append(i)
+                                    _append_based_on_filtered_by_type(new_items, i, filtered_by_type)
+                items = new_items
+
+            if t == 'reg':
+                new_items = []
+                for i in items:
+                    l1 = s.split(',')
+                    l2 = i.customs.get('_REGTAGS', '').split(',')
+                    # logger.info("[WebUI-REG] item %s -> regtags: %s", i, l2)
+                    found = [x for x in l1 if x in l2]
+                    if found:
+                        # logger.info("[WebUI-REG] found %s", i)
+                        _append_based_on_filtered_by_type(new_items, i, filtered_by_type)
+
+                logger.info("[WebUI-REG] s=%s -> len(new_items)=%d", s.split(','), len(new_items))
                 items = new_items
 
             # :COMMENT:maethor:150616: Legacy filters, kept for bookmarks compatibility
