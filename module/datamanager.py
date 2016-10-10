@@ -142,6 +142,7 @@ class WebUIDataManager(DataManager):
         if not user or user.is_administrator():
             return item
 
+        logger.debug("[WebUI - relation], DM _is_related_to: %s", item.__class__)
         return user._is_related_to(item)
 
     @staticmethod
@@ -155,6 +156,7 @@ class WebUIDataManager(DataManager):
             return items
 
         try:
+            logger.debug("[WebUI - relation], DM _only_related_to: %s", items)
             return [item for item in items if user._is_related_to(item)]
         except TypeError:
             return items if user._is_related_to(items) else None
@@ -670,18 +672,24 @@ class WebUIDataManager(DataManager):
                 elif s.lower() == 'probe':
                     items = [i for i in items if i.customs.get('_PROBE', '0') == '1']
                 else:
-                    # Manage SOFT state
+                    # Manage SOFT & HARD state
                     if s.startswith('s'):
                         s = s[1:]
                         if len(s) == 1:
                             items = [i for i in items if i.state_id == int(s) and i.state_type != 'HARD']
                         else:
                             items = [i for i in items if i.state == s.upper() and i.state_type != 'HARD']
+                    elif s.startswith('h'):
+                        s = s[1:]
+                        if len(s) == 1:
+                            items = [i for i in items if i.state_id != int(s) and i.state_type == 'HARD']
+                        else:
+                            items = [i for i in items if i.state != s.upper() and i.state_type == 'HARD']
                     else:
                         if len(s) == 1:
-                            items = [i for i in items if i.state_id == int(s) and i.state_type == 'HARD']
+                            items = [i for i in items if i.state_id == int(s)]
                         else:
-                            items = [i for i in items if i.state == s.upper() and i.state_type == 'HARD']
+                            items = [i for i in items if i.state == s.upper()]
 
             if t == 'isnot':
                 if s.lower() == 'ack':
@@ -693,18 +701,24 @@ class WebUIDataManager(DataManager):
                 elif s.lower() == 'impact':
                     items = [i for i in items if not i.is_impact]
                 else:
-                    # Manage soft state
+                    # Manage soft & hard state
                     if s.startswith('s'):
                         s = s[1:]
                         if len(s) == 1:
                             items = [i for i in items if i.state_id != int(s) and i.state_type != 'HARD']
                         else:
                             items = [i for i in items if i.state != s.upper() and i.state_type != 'HARD']
-                    else:
+                    elif s.startswith('h'):
+                        s = s[1:]
                         if len(s) == 1:
                             items = [i for i in items if i.state_id != int(s) and i.state_type == 'HARD']
                         else:
                             items = [i for i in items if i.state != s.upper() and i.state_type == 'HARD']
+                    else:
+                        if len(s) == 1:
+                            items = [i for i in items if i.state_id != int(s)]
+                        else:
+                            items = [i for i in items if i.state != s.upper()]
 
             if t == 'tech':
                 items = [i for i in items if i.customs.get('_TECH') == s]
@@ -935,7 +949,7 @@ class WebUIDataManager(DataManager):
             pass
         logger.debug("[WebUI - datamanager] get_contactgroup, name: %s", name)
 
-        return self._is_related_to(self.get_contactgroups(user=user, name=name, members=members), user)
+        return self._only_related_to(self.get_contactgroups(user=user, name=name, members=members), user)
 
     def get_contactgroup_members(self, name, user=None):
         """ Get a list of contacts members of a group
@@ -1153,7 +1167,7 @@ class WebUIDataManager(DataManager):
 
         names.sort()
         for name in names:
-            items.append((name, self.rg.tags[name]))
+            items.append((name, self.rg.services_tags[name]))
 
         logger.debug("[WebUI - datamanager] got %d services tags", len(items))
         return items

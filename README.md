@@ -3,13 +3,33 @@
 ## Description
 Shinken Web User Interface
 
-Current version is 2.4.1, available on [`shinken.io`](http://shinken.io/package/webui2).
+Current version is 2.4.2c, available on [`shinken.io`](http://shinken.io/package/webui2).
 
 ## Release notes
 
+### Version 2.4.2c
+
+ - Bugs and fixes:
+   - #520: data display for simple (non admin) user
+   - hosts/services synthesis count restricted count for no admin user
+
+### Version 2.4.2
+
+ - Features:
+   - Worldmap is based upon OSM/Leaflet instead of Google maps (thanks to RoPP)
+
+ - Bugs and fixes:
+   - #492: error on services tags page
+   - #496: hide Execute menu for simple users
+   - #515: missing view port declaration for mobile devices
+   - #517: missing menu on mobile devices
+   - #514: broken notification toggle widget
+   - #513: bad quotes aroud hostgroups links
+
+
 ### Version 2.4.1
  *This version replaces the 2.4.0 that was not released nor published on shinken.io.*
- 
+
  Version 2.4.0 intended to fix a serious bug (#486) that makes the WebUI not loading the external modules ... all my apologies for this!
 
  - Features:
