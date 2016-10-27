@@ -65,6 +65,27 @@ def load_config(app):
 
 
 def search_hosts_with_coordinates(search, user):
+
+    def append_host_if_valid(h):
+        if h.business_impact not in params['hosts_level']:
+            return False
+
+        try:
+            _lat = float(h.customs.get('_LOC_LAT', None))
+            _lng = float(h.customs.get('_LOC_LNG', None))
+            # lat/long must be between -180/180
+            if not (-180 <= _lat <= 180 and -180 <= _lng <= 180):
+                raise Exception()
+        except Exception:
+            logger.debug("[WebUI-worldmap] host '%s' has invalid GPS coordinates", h.get_name())
+            return False
+
+        logger.debug("[WebUI-worldmap] host '%s' located on worldmap: %f - %f", h.get_name(), _lat, _lng)
+        if h not in valid_hosts:
+            valid_hosts.append(h)
+        return True
+
+
     logger.debug("[WebUI-worldmap] search parameters '%s'", search)
     items = app.datamgr.search_hosts_and_services(search, user, get_impacts=True)
 
@@ -80,23 +101,10 @@ def search_hosts_with_coordinates(search, user):
             h = x.host
 
         logger.debug("[WebUI-worldmap] found host '%s'", h.get_name())
-
-        if h.business_impact not in params['hosts_level']:
-            continue
-
-        try:
-            _lat = float(h.customs.get('_LOC_LAT', None))
-            _lng = float(h.customs.get('_LOC_LNG', None))
-            # lat/long must be between -180/180
-            if not (-180 <= _lat <= 180 and -180 <= _lng <= 180):
-                raise Exception()
-        except Exception:
-            logger.debug("[WebUI-worldmap] host '%s' has invalid GPS coordinates", h.get_name())
-            continue
-
-        logger.debug("[WebUI-worldmap] host '%s' located on worldmap: %f - %f", h.get_name(), _lat, _lng)
-        if h not in valid_hosts:
-            valid_hosts.append(h)
+        valid = append_host_if_valid(h)
+        if valid:
+            for p in h.parent_dependencies:
+                append_host_if_valid(p)
 
     return valid_hosts
 

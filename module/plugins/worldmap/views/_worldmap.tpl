@@ -1,6 +1,6 @@
 <script>
   // Set true to activate javascript console logs
-  var debugMaps = false;
+  var debugMaps = true;
   if (debugMaps && !window.console) {
     alert('Your web browser does not have any console object ... you should stop using IE ;-) !');
   }
@@ -13,6 +13,7 @@
       new Host(
         '{{ h.get_name() }}', '{{ h.state }}',
         '{{ !app.helper.get_fa_icon_state(h) }}',
+        '{{ h.business_impact }}',
         '{{ !app.helper.get_business_impact_text(h.business_impact) }}',
         {{ float(h.customs.get('_LOC_LAT')) }}, {{ float(h.customs.get('_LOC_LNG')) }},
         {{ str(h.is_problem).lower() }}, {{ str(h.is_problem).lower() }} && {{ str(h.problem_has_been_acknowledged).lower() }},
@@ -26,6 +27,11 @@
             {{ str(s.problem_has_been_acknowledged).lower() }},
             '{{ h.get_name() }}'
           ),
+          %end
+        ],
+        [
+          %for p in h.parent_dependencies:
+          [{{float(p.customs.get('_LOC_LAT'))}}, {{float(p.customs.get('_LOC_LNG'))}}],
           %end
         ]
       ),
@@ -61,6 +67,17 @@
 
   function gpsLocation() {
     return L.latLng(this.lat, this.lng);
+  }
+
+  function parentsGpsLocations() {
+    console.log('TFLK parentsGpsLocations')
+    locations = [];
+    for (var i = 0; i < this.parents.length; i++) {
+      console.log('TFLK parentsGpsLocations parent' + this.parents[i][0])
+      var loc = L.latLng(this.parents[i][0], this.parents[i][1]);
+      locations.push(loc);
+    }
+    return locations;
   }
 
   function markerIcon() {
@@ -116,10 +133,11 @@
     return hs;
   }
 
-  function Host(name, state, iconState, businessImpact, lat, lng, isProblem, isAcknowledged, scheduledDowntime, services) {
+  function Host(name, state, iconState, businessImpactNumber, businessImpact, lat, lng, isProblem, isAcknowledged, scheduledDowntime, services, parents) {
     this.name = name;
     this.state = state;
     this.iconState = iconState;
+    this.businessImpactNumber = businessImpactNumber;
     this.businessImpact = businessImpact;
     this.lat = lat;
     this.lng = lng;
@@ -127,9 +145,11 @@
     this.isAcknowledged = isAcknowledged;
     this.scheduledDowntime = scheduledDowntime;
     this.services = services;
+    this.parents = parents;
 
     this.infoContent = hostInfoContent;
     this.location = gpsLocation;
+    this.parentLocations = parentsGpsLocations
     this.markerIcon = markerIcon;
     this.hostState = hostState;
   }
@@ -207,6 +227,7 @@
       console.log('mapInit_{{mapId}} ...');
 
     var scripts = [];
+    scripts.push('/static/worldmap/js/leaflet.js');
     scripts.push('/static/worldmap/js/leaflet.markercluster.js');
     scripts.push('/static/worldmap/js/Leaflet.Icon.Glyph.js');
     scripts.push('/static/worldmap/js/leaflet.label.js');
@@ -227,6 +248,19 @@
         var h = hosts[i];
         bounds.extend(h.location());
         allMarkers_{{mapId}}.push(markerCreate_{{mapId}}(h));
+        console.log('TFLK')
+        var parentLocations = h.parentLocations();
+        for (var j = 0; j < parentLocations.length; j++) {
+          console.log('TFLK j' + j)
+          var loc = parentLocations[j];
+          var line = new L.Polyline(
+            [h.location(), loc],{
+              weight: h.businessImpactNumber,
+            }
+          );
+          
+          allMarkers_{{mapId}}.push(line);
+        }
       }
 
       // Zoom
@@ -234,6 +268,9 @@
 
       // Build marker cluster
       var markerCluster = L.markerClusterGroup({
+        maxClusterRadius: 25,
+        //spiderfyDistanceMultiplier: 3,
+        //removeOutsideVisibleBounds: false,
         iconCreateFunction: function(cluster) {
           // Manage markers in the cluster ...
           var markers = cluster.getAllChildMarkers();
