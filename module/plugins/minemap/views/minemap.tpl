@@ -37,7 +37,7 @@
             %if not h.get_name() in rows:
                %rows.append(h.get_name())
                %for s in h.services:
-                  %columns.append(s.get_name() if s.display_name == '' else s.display_name)
+                  %columns.append(s.get_name())
                %end
             %end
          %end

@@ -70,8 +70,8 @@ def show_minemap():
 
     # Apply search filter if exists ...
     search = app.request.query.get('search', "type:host")
-    if not "type:host" in search:
-        search = "type:host "+search
+    # if not "type:host" in search:
+    #     search = "type:host "+search
     logger.debug("[WebUI-worldmap] search parameters '%s'", search)
     items = app.datamgr.search_hosts_and_services(search, user, get_impacts=False)
 
