@@ -742,8 +742,15 @@ class WebUIDataManager(DataManager):
                 new_items = []
                 for i in items:
                     l1 = s.split(',')
-                    l2 = i.customs.get('_REGTAGS', '').split(',')
-                    # logger.info("[WebUI-REG] item %s -> regtags: %s", i, l2)
+                    if i.__class__.my_type == 'service':
+                        l2 = i.host.cpe_registration_tags.split(',')
+                    elif i.__class__.my_type == 'host':
+                        l2 = i.cpe_registration_tags.split(',')
+                    else:
+                        l2 = []
+
+                    # l2 = i.customs.get('_REGTAGS', '').split(',')
+                    logger.info("[WebUI-REG] item %s -> regtags: %s", i, l2)
                     found = [x for x in l1 if x in l2]
                     if found:
                         # logger.info("[WebUI-REG] found %s", i)
