@@ -21,7 +21,7 @@
       <li role="presentation" class="divider"></li>
       <li role="presentation"><a role="menuitem" href="{{ search_action }}?search=is:probe&title=All Probes">All Probes</a></li>
       <li role="presentation"><a role="menuitem" href="{{ search_action }}?search=tech:gpon is:probe&title=GPON Probes">GPON Probes</a></li>
-      <li role="presentation"><a role="menuitem" href="{{ search_action }}?search=tech:wifi is:probe&title=WiFi Probes">WiFi Probes</a></li>
+      <li role="presentation"><a role="menuitem" href="{{ search_action }}?search=tech:wimax is:probe&title=WiMAX Probes">WiMAX Probes</a></li>
       <li role="presentation"><a role="menuitem" href="{{ search_action }}?search=tech:docsis is:probe&title=DOCSIS Probes">DOCSIS Probes</a></li>
       <li role="presentation"><a role="menuitem" href="{{ search_action }}?search=tech:lte is:probe&title=LTE Probes">LTE Probes</a></li>
       <li role="presentation" class="divider"></li>
